@@ -61,11 +61,14 @@ Output is written as compilation progresses:
 
 ## Comments
 
-Lines beginning with `;` and any text after `;` on a line are comments.
+Lines beginning with `;` and any text after `;` on a line are comments. Full-line
+comments are copied straight through to the generated output. A comment after AXY
+code is attached to the first assembler instruction that statement generates.
 
 ```
-; this is a comment
-a = 42          ; comment after code
+; this is a comment          -> ; this is a comment
+a = 42          ; marker     -> lda #42 ; marker
+if lives == 0 ; is the player dead ?  -> lda lives ; is the player dead ?
 ```
 
 ## Numbers
@@ -361,6 +364,13 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-10 — comments in generated output
+
+- Full-line comments in AXY source are copied straight through to the generated
+  output as their own comment lines.
+- A comment after AXY code is appended to the first assembler instruction that
+  statement generates (labels and block braces are skipped).
 
 ## 2026-08-10 — assembler mode (`asm` / `endasm`)
 

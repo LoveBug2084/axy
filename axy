@@ -520,7 +520,15 @@ class AXYCompiler:
                     stripped = raw_line.strip()
                     if not stripped:
                         continue
+                    if stripped.startswith(';'):
+                        target.write(f"{stripped}\n")
+                        continue
                     self.current_raw = stripped
+                    comment = ''
+                    semi = stripped.find(';')
+                    if semi != -1:
+                        comment = stripped[semi:]
+                        stripped = stripped[:semi].rstrip()
                     tokens, cols = self.tokenize(stripped)
                     if not tokens:
                         continue
@@ -539,6 +547,14 @@ class AXYCompiler:
                         self.process_statement(line_num, tokens, cols)
                         if self.errors:
                             return False
+                        if comment:
+                            for i, line in enumerate(self.output):
+                                s = line.strip()
+                                if s not in ('{', '}') and not s.startswith('.'):
+                                    self.output[i] = f"{line}{comment}"
+                                    break
+                            else:
+                                self.output[0] = f"{self.output[0]}{comment}"
                         for line in self.output:
                             target.write(f"{line}\n")
                         self.output.clear()
