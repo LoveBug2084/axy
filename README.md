@@ -292,6 +292,31 @@ endwhile
 
 Uses the same operators and operand rules as `if`.
 
+## Assembler mode (`asm` / `endasm`)
+
+```
+asm
+    <raw assembler lines>
+endasm
+```
+
+`asm` switches to raw assembler mode: every line after it is copied to the
+generated output verbatim — indentation, comments, and blank lines included —
+with no AXY interpretation. `endasm` switches back to normal AXY compilation.
+The `asm`/`endasm` lines themselves are not emitted.
+
+Assembler mode is for code that AXY cannot express. Lines inside it are
+completely ignored by the compiler: they are never parsed as declarations, so
+a line like `foo = &1234` inside an asm block is just passed through and does
+not declare an AXY constant.
+
+Symbols are shared through the generated file. Constants and variables must
+be declared in AXY code to be usable inside an asm block (AXY symbols are
+emitted in the header, before the `org`), and a constant defined inside an
+asm block can be referenced from later AXY code by name, where it compiles to
+an immediate (`#name`). A variable defined inside an asm block is not
+knowable to AXY as a variable — AXY would treat its name as a constant.
+
 ## Errors
 
 Errors print the offending source line with a `^` marker under the position,
@@ -336,6 +361,18 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-10 — assembler mode (`asm` / `endasm`)
+
+- `asm` switches to raw assembler mode: every line after it is copied to the
+  generated output verbatim, with no AXY interpretation, until `endasm`
+  switches back.
+- Lines inside an asm block are ignored by the compiler entirely — they are
+  never parsed as declarations, so they cannot accidentally declare AXY
+  constants.
+- Symbols are shared through the generated file: AXY constants and variables
+  are usable inside an asm block, and a constant defined inside an asm block
+  can be referenced from AXY code as an immediate (`#name`).
 
 ## 2026-08-10 — `.axyvar` state file
 

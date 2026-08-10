@@ -19,7 +19,7 @@ def parse_number(text):
     return int(text, 10)
 
 KEYWORDS = ('var', 'const', 'org', 'axyvar', 'if', 'endif', 'while',
-            'endwhile', 'jmp', 'jsr', 'rts', 'goto')
+            'endwhile', 'jmp', 'jsr', 'rts', 'goto', 'asm', 'endasm')
 
 class AXYCompiler:
     def __init__(self):
@@ -454,8 +454,17 @@ class AXYCompiler:
         self.while_stack = []
         
         # Pass 1: declarations
+        in_asm = False
         for line_num, tokens, raw, cols in self.read_lines(filename):
             self.current_raw = raw
+            if tokens[0] == 'asm':
+                in_asm = True
+                continue
+            if tokens[0] == 'endasm':
+                in_asm = False
+                continue
+            if in_asm:
+                continue
             if tokens[0] in ('var', 'const'):
                 self.process_declaration(line_num, tokens, cols)
             elif tokens[0] == 'org':
@@ -498,17 +507,45 @@ class AXYCompiler:
             
             target.write("\n")
             
-            for line_num, tokens, raw, cols in self.read_lines(filename):
-                self.current_raw = raw
-                if tokens[0] not in ('var', 'const', 'org', 'axyvar'):
-                    if line_num in self.const_def_lines:
+            in_asm = False
+            with open(filename, 'r') as f:
+                for line_num, raw_line in enumerate(f, 1):
+                    if in_asm:
+                        if raw_line.strip() == 'endasm':
+                            in_asm = False
+                            continue
+                        target.write(raw_line)
                         continue
-                    self.process_statement(line_num, tokens, cols)
-                    if self.errors:
+                    
+                    stripped = raw_line.strip()
+                    if not stripped:
+                        continue
+                    self.current_raw = stripped
+                    tokens, cols = self.tokenize(stripped)
+                    if not tokens:
+                        continue
+                    if tokens[0] == 'asm':
+                        if len(tokens) != 1:
+                            self._error(line_num, 0, "'asm' takes no arguments")
+                            return False
+                        in_asm = True
+                        continue
+                    if tokens[0] == 'endasm':
+                        self._error(line_num, 0, "'endasm' without matching 'asm'")
                         return False
-                    for line in self.output:
-                        target.write(f"{line}\n")
-                    self.output.clear()
+                    if tokens[0] not in ('var', 'const', 'org', 'axyvar'):
+                        if line_num in self.const_def_lines:
+                            continue
+                        self.process_statement(line_num, tokens, cols)
+                        if self.errors:
+                            return False
+                        for line in self.output:
+                            target.write(f"{line}\n")
+                        self.output.clear()
+            
+            if in_asm:
+                self._error(None, 0, "Missing 'endasm'")
+                return False
             
             if self.if_stack:
                 self._error(None, 0, "Missing 'endif'")
@@ -576,6 +613,8 @@ def main():
         print("  endif               - End of if block")
         print("  while reg != value  - While loop")
         print("  endwhile            - End of while loop")
+        print("  asm                 - Raw assembler passthrough")
+        print("  endasm              - Back to AXY mode")
         sys.exit(1)
     
     infile = args[0]
