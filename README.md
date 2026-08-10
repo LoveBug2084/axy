@@ -40,10 +40,19 @@ version control.
 The compiler produces a BeebAsm source file:
 
 - header comment
-- `var` definitions and constants as BeebAsm symbols (`lives = &70`,
-  `max = 5`, `greeting = "Hello"`), including ones never used in the code
-- `org <address>` if specified in the source (see below)
+- the source code, with each `var` and constant emitted as a BeebAsm symbol
+  (`lives = &70`, `max = 5`, `greeting = "Hello"`) **at the point it is
+  declared**, including ones never used in the code
+- `org <address>` emitted where it appears in the source (see below)
 - the generated code
+
+Blank lines, comments, and the indentation of the source are preserved in the
+output: each source line keeps its place and its leading whitespace in the
+generated BeebAsm file.
+
+Constants and variables therefore have to be declared before they are used:
+BeebAsm resolves each symbol at the point it is defined, so a use before the
+declaration line is reported by BeebAsm as an undefined symbol.
 
 No entry or exit labels are generated automatically: labels such as `.start`
 or `.end` are chosen by the user in the source. The only labels generated
@@ -107,9 +116,11 @@ org %1111000000000000
 org base                ; const base = &1900
 ```
 
-If `<address>` names a constant, the constant is emitted as a symbol in the
-header, so a chain like `org_addr = base` with `base = &1900` emits
-`org org_addr` and BeebAsm resolves it.
+If `<address>` names a constant, the constant is emitted as a symbol at its
+declaration, so a chain like `org_addr = base` with `base = &1900` emits
+`org org_addr` after both symbols and BeebAsm resolves it. `org` is emitted
+where it appears in the source; code before it stays at BeebAsm's default
+start address.
 
 If no `org` is given, no `org` line is generated. Only one `org` is allowed.
 
@@ -166,10 +177,10 @@ declared before its first assignment if it is to stay a variable. Constants
 are immutable: a later `name = number` or `name += 1` reports an error, and
 a name can only be declared once.
 
-A constant is emitted once as a BeebAsm symbol in the generated output,
-keeping the notation you wrote in (`max = 5`, `base = &1900`,
-`greeting = "Hello and welcome"`). Uses reference the constant by name:
-`if score == max` compiles to `cmp #max`, and `a = max` compiles to
+A constant is emitted once as a BeebAsm symbol at the point it is declared in
+the generated output, keeping the notation you wrote in (`max = 5`,
+`base = &1900`, `greeting = "Hello and welcome"`). Uses reference the constant
+by name: `if score == max` compiles to `cmp #max`, and `a = max` compiles to
 `lda #max`. All constants are emitted, including unused ones.
 
 A constant may hold another constant's name (`maximum = limit`); the chain
@@ -364,6 +375,19 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-10 — blank lines preserved in generated output
+
+- Blank and whitespace-only lines in AXY source are now copied through to the
+  generated output instead of being stripped, alongside comments and
+  indentation.
+
+## 2026-08-10 — declarations emitted at their definition site
+
+- `var` and constant declarations are no longer collected into a header block:
+  each is emitted as a BeebAsm symbol at the point it is declared in the
+  source. Uses before the declaration line are left to BeebAsm to report.
+- `org` is now emitted where it appears in the source instead of at the top.
 
 ## 2026-08-10 — comments in generated output
 

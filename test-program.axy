@@ -8,9 +8,8 @@
 start_addr = &1900
 variables = &100
 
-
 org_addr = start_addr
-org org_addr            ; emitted as 'org org_addr'; BeebAsm resolves the chain
+	org org_addr            ; emitted as 'org org_addr'; BeebAsm resolves the chain
 
 ; ============================================
 ; Variable declarations
@@ -27,119 +26,160 @@ var temp
 ; Constants
 ; ============================================
 ; Every constant is emitted as a BeebAsm symbol and referenced by name.
+
 limit = 100              ; number constant
 maximum = limit          ; constant chain - referenced as #maximum, not #limit
 lives_limit = 5          ; implicit number constant (no 'const' keyword)
 max_value = 99
 const target = 10        ; explicit 'const' directive still works
 const zero = 0
-space = 'A'              ; character constant (ASCII value)
-welcomeMessage = "Hello and welcome to our resturant"   ; unused string constant
+space = ' '              ; character constant (ASCII value)
+welcomeMessage = "Hello and welcome to our resturant"   ; unused string constant in this source file but defined in beebasm for others to use
 
 ; ============================================
 ; Test 1: Basic assignment (number constants)
 ; ============================================
+
 .start
-lives = lives_limit      ; LDA #lives_limit / STA lives
-score = zero             ; LDA #zero / STA score
-counter = target         ; LDA #target / STA counter
-temp = max_value         ; LDA #max_value / STA temp
+	lives = lives_limit      ; LDA #lives_limit / STA lives
+	score = zero             ; LDA #zero / STA score
+	counter = target         ; LDA #target / STA counter
+	temp = max_value         ; LDA #max_value / STA temp
 
 ; ============================================
 ; Test 2: Constants referenced by name
 ; ============================================
-a = maximum              ; chain by name -> LDA #maximum
-x = space                ; character    -> LDX #space
-temp = maximum           ; chain by name -> LDA #maximum / STA temp
+
+	a = maximum              ; chain by name -> LDA #maximum
+	x = space                ; character    -> LDX #space
+	temp = maximum           ; chain by name -> LDA #maximum / STA temp
 
 ; ============================================
 ; Test 3: Register operations
 ; ============================================
-a = 42              ; LDA #42
-x = lives           ; LDX lives
-lives = x           ; STX lives
-y = counter         ; LDY counter
-counter = y         ; STY counter
+
+	a = 42              ; LDA #42
+	x = lives           ; LDX lives
+	lives = x           ; STX lives
+	y = counter         ; LDY counter
+	counter = y         ; STY counter
 
 ; ============================================
 ; Test 4: Register transfers
 ; ============================================
-a = x               ; TXA
-x = a               ; TAX
-a = y               ; TYA
-y = a               ; TAY
+
+	a = x               ; TXA
+	x = a               ; TAX
+	a = y               ; TYA
+	y = a               ; TAY
 
 ; ============================================
 ; Test 5: Increment/Decrement
 ; ============================================
-x += 1              ; INX
-x -= 1              ; DEX
-y += 1              ; INY
-y -= 1              ; DEY
-lives += 1          ; INC lives
-score -= 1          ; DEC score
-counter += 1        ; INC counter
+
+	x += 1              ; INX
+	x -= 1              ; DEX
+	y += 1              ; INY
+	y -= 1              ; DEY
+
+	lives += 1          ; INC lives
+	score -= 1          ; DEC score
+	counter += 1        ; INC counter
 
 ; ============================================
 ; Test 6: Labels and unconditional jumps
 ; ============================================
-    temp += 1
-    if temp == 10
-        jmp done
-    endif
-    jmp start
+
+	temp += 1
+	jmp start
 
 ; ============================================
 ; Test 7: If statements
 ; ============================================
+
 .check_lives
-    if lives == lives_limit     ; CMP #lives_limit
-        score = 100
-    endif
+	if lives == lives_limit
+		score = 100
+	endif
 
-    if lives != 5
-        score = 0
-    endif
+	if lives != 5
+		score = 0
+	endif
 
-    if a == space               ; CMP #space
-        score = 1
-    endif
+	if a == space               ; CMP #space
+		score = 1
+	endif
 
-    if maximum == limit         ; const on the left: LDA #maximum / CMP #limit
-        score = 0
-    endif
+	if maximum == limit         ; const on the left: LDA #maximum / CMP #limit
+		score = 0
+	endif
 
 ; ============================================
 ; Test 8: While loop
 ; ============================================
-counter = 10
-while counter != 0
-    score += 1
-    counter -= 1
-endwhile
+
+	counter = 10
+	while counter != 0
+		score += 1
+		counter -= 1
+	endwhile
 
 ; ============================================
 ; Test 9: Nested control flow
 ; ============================================
+
 counter = 5
 .outer
-    if counter == 0
-        jmp done
-    endif
-    temp = 3
-    .inner
-        if temp == 0
-            jmp next
-        endif
-        score += 1
-        temp -= 1
-        jmp inner
-    .next
-        counter -= 1
-        jmp outer
+	if counter == 0
+		jmp done
+	endif
+
+	temp = 3
+
+.inner
+	if temp == 0
+		jmp next
+	endif
+
+	score += 1
+	temp -= 1
+	jmp inner
+
+.next
+
+	counter -= 1
+	jmp outer
+
+; ============================================
+; Test 10: Assembler mode (asm / endasm)
+; ============================================
+; Raw BeebAsm passes through verbatim. AXY variables and constants are known
+; inside an asm block, and a constant defined there is usable from AXY.
+
+	asm
+
+secret = &47            ; constant defined in raw asm
+
+	ldx #0
+.loop_a
+
+	txa
+	sta lives,X             ; AXY variable
+	inx
+	cpx #limit              ; AXY constant
+	bne loop_a
+
+	lda #&A5                ; BeebAsm-only notation, never parsed by AXY
+	sta temp
+
+	endasm
+
+a = secret                  ; LDA #secret - asm-defined constant
 
 ; ============================================
 ; Final - all tests passed
 ; ============================================
+
 .done
-    a = 42          ; Success marker
+
+a = 42          ; Success marker
