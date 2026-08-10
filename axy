@@ -18,7 +18,7 @@ def parse_number(text):
         return int(text[1:], 2)
     return int(text, 10)
 
-KEYWORDS = ('var', 'const', 'org', 'axyvar', 'if', 'endif', 'while',
+KEYWORDS = ('var', 'org', 'axyvar', 'if', 'endif', 'while',
             'endwhile', 'repeat', 'until', 'jmp', 'jsr', 'rts', 'goto',
             'asm', 'endasm')
 
@@ -143,13 +143,6 @@ class AXYCompiler:
             addr = self.next_var
             self.next_var += 1
             self.symbols[name] = {'type': 'var', 'addr': addr}
-            return
-        
-        elif tokenLower == 'const':
-            if len(tokens) != 4 or tokens[2] != '=':
-                self._error(line_num, 0, "Expected 'const name = value'")
-                return
-            self._define_const(tokens[1], tokens[3], line_num, cols[1])
             return
 
     def _define_const(self, name, lit, line_num, col):
@@ -520,7 +513,7 @@ class AXYCompiler:
                 continue
             if in_asm:
                 continue
-            if tokenLower in ('var', 'const'):
+            if tokenLower == 'var':
                 self.process_declaration(line_num, tokens, cols)
             elif tokenLower == 'org':
                 if len(tokens) != 2:
@@ -593,16 +586,13 @@ class AXYCompiler:
                         sym = self.symbols[tokens[1]]
                         target.write(f"{leading_ws}{tokens[1]} = &{sym['addr']:02X}{comment}\n")
                         continue
-                    if tokenLower == 'const':
-                        target.write(f"{leading_ws}{tokens[1]} = {tokens[3]}{comment}\n")
-                        continue
                     if tokenLower == 'org':
                         target.write(f"{leading_ws}{tokens[0]} {tokens[1]}{comment}\n")
                         continue
                     if line_num in self.const_def_lines:
                         target.write(f"{leading_ws}{tokens[0]} = {tokens[2]}{comment}\n")
                         continue
-                    if tokenLower not in ('var', 'const', 'org', 'axyvar'):
+                    if tokenLower not in ('var', 'org', 'axyvar'):
                         self.process_statement(line_num, tokens, cols)
                         if self.errors:
                             return False
@@ -680,8 +670,8 @@ def main():
         print("  org <address>       - Set program start address")
         print("  axyvar <address>    - Set variable allocation start address")
         print("  var name            - Declare variable")
-        print("  const name = value  - Declare compile-time constant")
-        print("  name = value        - Assignment; a new name declares a constant")
+        print("  name = value        - Defines a constant (if name not already defined)")
+        print("  name = value        - Assignment to variable")
         print("  name += 1           - Increment")
         print("  name -= 1           - Decrement")
         print("  .name               - Define label")

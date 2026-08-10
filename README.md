@@ -112,7 +112,7 @@ symbol:
 org &2000
 org 1234
 org %1111000000000000
-org base                ; const base = &1900
+org base                ; constant base = &1900
 ```
 
 If `<address>` names a constant, the constant is emitted as a symbol at its
@@ -163,14 +163,15 @@ there is no default base, so declaring a `var` before either has set one is
 an error. The registers `a`, `x`, `y` cannot be used as variable
 names, and a name can only be declared once.
 
-### const
+### constants
 
 ```
-const name = value
+name = value
 ```
 
-Declares a compile-time constant. The `const` keyword is optional: any line
-`name = value` where `name` is not already declared (variable, register, or
+Declares a compile-time constant.
+
+ Any line `name = value` where `name` is not already declared (variable, register, or
 constant) and is not a keyword also declares a constant. A `var` must be
 declared before its first assignment if it is to stay a variable. Constants
 are immutable: a later `name = number` or `name += 1` reports an error, and
@@ -198,7 +199,8 @@ dest = src
 ```
 
 Copies `src` into `dest`. `dest` may be a register or variable; `src` may be
-a register, variable, number literal, or constant (`#name`).
+a register, variable, number literal, or constant. The correct addressing mode is
+chosen matching the src type.
 
 ## Increment / Decrement
 
@@ -209,7 +211,7 @@ name -= 1
 
 Only `+= 1` and `-= 1` are supported. For `x`/`y` this compiles to
 `inx`/`dex`/`iny`/`dey`; for variables it compiles to `inc name`/`dec name`.
-`a += 1` is not supported.
+`a` is not supported.
 
 ## Labels and jumps
 
@@ -378,7 +380,7 @@ count = 0
 
 | Feature              | Status      |
 | -------------------- | ----------- |
-| `var` / `const`      | implemented |
+| `var`                | implemented |
 | assignment           | implemented |
 | `+= 1` / `-= 1`      | implemented |
 | labels (`.name`)     | implemented |

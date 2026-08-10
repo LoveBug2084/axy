@@ -33,8 +33,8 @@
 	maximum = limit			; constant chain - referenced as #maximum, not #limit
 	lives_limit = 5			; implicit number constant (no 'const' keyword)
 	max_value = 99
-	const target = 10		; explicit 'const' directive still works
-	const zero = 0
+	target = 10
+	zero = 0
 	space = ' '			; character constant (ASCII value)
 
 					; unused string constant in this source file but defined in beebasm for others to use
@@ -125,7 +125,7 @@
 		score = 1
 	endif
 
-	if maximum == limit		; const on the left: LDA #maximum / CMP #limit
+	if maximum == limit		; compare two constants !
 		score = 0
 	endif
 
