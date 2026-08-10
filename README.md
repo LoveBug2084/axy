@@ -1,6 +1,5 @@
 **Please be aware this project is under construction and this is a very early draft**
 
-
 # AXY Language Specification
 
 AXY is a small medium-level language that compiles to BeebAsm 6502 assembly.
@@ -122,7 +121,7 @@ declaration, so a chain like `org_addr = base` with `base = &1900` emits
 where it appears in the source; code before it stays at BeebAsm's default
 start address.
 
-If no `org` is given, no `org` line is generated. Only one `org` is allowed.
+If no `org` is given, no `org` line is generated.
 
 ## Variable start (`axyvar`)
 
@@ -267,17 +266,17 @@ Operators: `==` (equal) and `!=` (not equal).
 
 Comparison compilation:
 
-| Source                     | Emitted                    |
-|----------------------------|----------------------------|
-| `if a == var`              | `cmp var`                  |
-| `if a == 5`                | `cmp #5`                   |
-| `if x == var`              | `cpx var`                  |
-| `if x == const`            | `cpx #constname`           |
-| `if y == var`              | `cpy var`                  |
-| `if y == 5`                | `cpy #5`                   |
-| `if var == 10`             | `lda var` / `cmp #10`      |
-| `if var == othervar`       | `lda var` / `cmp othervar` |
-| `if var == const`          | `lda var` / `cmp #constname` |
+| Source               | Emitted                      |
+| -------------------- | ---------------------------- |
+| `if a == var`        | `cmp var`                    |
+| `if a == 5`          | `cmp #5`                     |
+| `if x == var`        | `cpx var`                    |
+| `if x == const`      | `cpx #constname`             |
+| `if y == var`        | `cpy var`                    |
+| `if y == 5`          | `cpy #5`                     |
+| `if var == 10`       | `lda var` / `cmp #10`        |
+| `if var == othervar` | `lda var` / `cmp othervar`   |
+| `if var == const`    | `lda var` / `cmp #constname` |
 
 Rules:
 
@@ -377,16 +376,16 @@ count = 0
 
 ## Status
 
-| Feature                    | Status                                   |
-|----------------------------|------------------------------------------|
-| `var` / `const`            | implemented                              |
-| assignment                 | implemented                              |
-| `+= 1` / `-= 1`            | implemented                              |
-| labels (`.name`)           | implemented                              |
-| `jmp`                      | implemented                              |
-| `jsr` / `rts`              | implemented                              |
-| `if ... endif`             | implemented                              |
-| `while ... endwhile`       | implemented                              |
+| Feature              | Status      |
+| -------------------- | ----------- |
+| `var` / `const`      | implemented |
+| assignment           | implemented |
+| `+= 1` / `-= 1`      | implemented |
+| labels (`.name`)     | implemented |
+| `jmp`                | implemented |
+| `jsr` / `rts`        | implemented |
+| `if ... endif`       | implemented |
+| `while ... endwhile` | implemented |
 
 ---
 
