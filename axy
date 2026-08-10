@@ -173,7 +173,7 @@ class AXYCompiler:
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jmp label' expected")
                 return
-            self.output.append(f"\tjmp {tokens[1]}")
+            self.output.append(f"jmp {tokens[1]}")
             return
         
         # Jsr
@@ -181,7 +181,7 @@ class AXYCompiler:
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jsr label' expected")
                 return
-            self.output.append(f"\tjsr {tokens[1]}")
+            self.output.append(f"jsr {tokens[1]}")
             return
         
         # Rts
@@ -189,7 +189,7 @@ class AXYCompiler:
             if len(tokens) != 1:
                 self._error(line_num, 0, "'rts' takes no arguments")
                 return
-            self.output.append("\trts")
+            self.output.append("rts")
             return
         
         # If statement
@@ -229,7 +229,7 @@ class AXYCompiler:
                 self._error(line_num, 0, "'endwhile' without matching 'while'")
                 return
             start_label, end_label = self.while_stack.pop()
-            self.output.append(f"\tjmp {start_label[1:]}")
+            self.output.append(f"jmp {start_label[1:]}")
             self.output.append(end_label)
             self.output.append("}")
             return
@@ -264,9 +264,9 @@ class AXYCompiler:
         
         self.output.append("{")
         if op == '==':
-            self.output.append(f"\tbne {end_label[1:]}")
+            self.output.append(f"bne {end_label[1:]}")
         elif op == '!=':
-            self.output.append(f"\tbeq {end_label[1:]}")
+            self.output.append(f"beq {end_label[1:]}")
         else:
             self._error(line_num, cols[2], f"Unsupported operator '{op}'")
             return
@@ -291,9 +291,9 @@ class AXYCompiler:
             return
         
         if op == '==':
-            self.output.append(f"\tbne {end_label[1:]}")
+            self.output.append(f"bne {end_label[1:]}")
         elif op == '!=':
-            self.output.append(f"\tbeq {end_label[1:]}")
+            self.output.append(f"beq {end_label[1:]}")
         else:
             self._error(line_num, cols[2], f"Unsupported operator '{op}'")
             return
@@ -330,9 +330,9 @@ class AXYCompiler:
             return
         
         if op == '==':
-            self.output.append(f"\tbne {start_label[1:]}")
+            self.output.append(f"bne {start_label[1:]}")
         elif op == '!=':
-            self.output.append(f"\tbeq {start_label[1:]}")
+            self.output.append(f"beq {start_label[1:]}")
         else:
             self._error(line_num, cols[2], f"Unsupported operator '{op}'")
             return
@@ -346,9 +346,9 @@ class AXYCompiler:
             reg = left
         else:
             if left_sym is not None and left_sym['type'] == 'var':
-                self.output.append(f"\tlda {left}")
+                self.output.append(f"lda {left}")
             else:
-                self.output.append(f"\tlda #{left}")
+                self.output.append(f"lda #{left}")
             reg = 'a'
         
         try:
@@ -371,11 +371,11 @@ class AXYCompiler:
                 operand = f"#{val}"
         
         if reg == 'a':
-            self.output.append(f"\tcmp {operand}")
+            self.output.append(f"cmp {operand}")
         elif reg == 'x':
-            self.output.append(f"\tcpx {operand}")
+            self.output.append(f"cpx {operand}")
         elif reg == 'y':
-            self.output.append(f"\tcpy {operand}")
+            self.output.append(f"cpy {operand}")
         return True
 
     def process_incdec(self, line_num, tokens, cols):
@@ -391,13 +391,13 @@ class AXYCompiler:
         
         if sym['type'] == 'reg':
             if name == 'x' and op == '+=' and amount == 1:
-                self.output.append("\tinx")
+                self.output.append("inx")
             elif name == 'x' and op == '-=' and amount == 1:
-                self.output.append("\tdex")
+                self.output.append("dex")
             elif name == 'y' and op == '+=' and amount == 1:
-                self.output.append("\tiny")
+                self.output.append("iny")
             elif name == 'y' and op == '-=' and amount == 1:
-                self.output.append("\tdey")
+                self.output.append("dey")
             else:
                 self._error(line_num, cols[2], "Only +/- 1 supported for X/Y")
             return
@@ -407,9 +407,9 @@ class AXYCompiler:
             return
         
         if op == '+=' and amount == 1:
-            self.output.append(f"\tinc {name}")
+            self.output.append(f"inc {name}")
         elif op == '-=' and amount == 1:
-            self.output.append(f"\tdec {name}")
+            self.output.append(f"dec {name}")
         else:
             self._error(line_num, cols[2], "Only +=1 and -=1 supported")
 
@@ -448,55 +448,55 @@ class AXYCompiler:
     def _gen_assign_immediate(self, dest, dest_sym, lit):
         if dest_sym['type'] == 'reg':
             if dest == 'a':
-                self.output.append(f"\tlda #{lit}")
+                self.output.append(f"lda #{lit}")
             elif dest == 'x':
-                self.output.append(f"\tldx #{lit}")
+                self.output.append(f"ldx #{lit}")
             elif dest == 'y':
-                self.output.append(f"\tldy #{lit}")
+                self.output.append(f"ldy #{lit}")
         else:
-            self.output.append(f"\tlda #{lit}")
-            self.output.append(f"\tsta {dest}")
+            self.output.append(f"lda #{lit}")
+            self.output.append(f"sta {dest}")
 
     def _gen_assign(self, dest, dest_sym, src, src_sym):
         if dest_sym['type'] == 'reg':
             if dest == 'a':
                 if src_sym['type'] == 'reg':
                     if src == 'x':
-                        self.output.append("\ttxa")
+                        self.output.append("txa")
                     elif src == 'y':
-                        self.output.append("\ttya")
+                        self.output.append("tya")
                 else:
-                    self.output.append(f"\tlda {src}")
+                    self.output.append(f"lda {src}")
             elif dest == 'x':
                 if src_sym['type'] == 'reg':
                     if src == 'a':
-                        self.output.append("\ttax")
+                        self.output.append("tax")
                     elif src == 'y':
-                        self.output.append("\ttya")
-                        self.output.append("\ttax")
+                        self.output.append("tya")
+                        self.output.append("tax")
                 else:
-                    self.output.append(f"\tldx {src}")
+                    self.output.append(f"ldx {src}")
             elif dest == 'y':
                 if src_sym['type'] == 'reg':
                     if src == 'a':
-                        self.output.append("\ttay")
+                        self.output.append("tay")
                     elif src == 'x':
-                        self.output.append("\ttxa")
-                        self.output.append("\ttay")
+                        self.output.append("txa")
+                        self.output.append("tay")
                 else:
-                    self.output.append(f"\tldy {src}")
+                    self.output.append(f"ldy {src}")
         
         elif dest_sym['type'] == 'var':
             if src_sym['type'] == 'reg':
                 if src == 'a':
-                    self.output.append(f"\tsta {dest}")
+                    self.output.append(f"sta {dest}")
                 elif src == 'x':
-                    self.output.append(f"\tstx {dest}")
+                    self.output.append(f"stx {dest}")
                 elif src == 'y':
-                    self.output.append(f"\tsty {dest}")
+                    self.output.append(f"sty {dest}")
             else:
-                self.output.append(f"\tlda {src}")
-                self.output.append(f"\tsta {dest}")
+                self.output.append(f"lda {src}")
+                self.output.append(f"sta {dest}")
 
     def translate(self, filename, outfile):
         self.if_stack = []
@@ -560,11 +560,12 @@ class AXYCompiler:
                         continue
                     
                     stripped = raw_line.strip()
+                    leading_ws = raw_line[:len(raw_line) - len(raw_line.lstrip())]
                     if not stripped:
                         target.write(raw_line)
                         continue
                     if stripped.startswith(';'):
-                        target.write(f"{stripped}\n")
+                        target.write(raw_line)
                         continue
                     self.current_raw = stripped
                     comment = ''
@@ -586,16 +587,16 @@ class AXYCompiler:
                         return False
                     if tokens[0] == 'var':
                         sym = self.symbols[tokens[1].lower()]
-                        target.write(f"{tokens[1].lower()} = &{sym['addr']:02X}{comment}\n")
+                        target.write(f"{leading_ws}{tokens[1].lower()} = &{sym['addr']:02X}{comment}\n")
                         continue
                     if tokens[0] == 'const':
-                        target.write(f"{tokens[1].lower()} = {tokens[3]}{comment}\n")
+                        target.write(f"{leading_ws}{tokens[1].lower()} = {tokens[3]}{comment}\n")
                         continue
                     if tokens[0] == 'org':
-                        target.write(f"\torg {tokens[1]}{comment}\n")
+                        target.write(f"{leading_ws}org {tokens[1]}{comment}\n")
                         continue
                     if line_num in self.const_def_lines:
-                        target.write(f"{tokens[0].lower()} = {tokens[2]}{comment}\n")
+                        target.write(f"{leading_ws}{tokens[0].lower()} = {tokens[2]}{comment}\n")
                         continue
                     if tokens[0] not in ('var', 'const', 'org', 'axyvar'):
                         self.process_statement(line_num, tokens, cols)
@@ -610,7 +611,7 @@ class AXYCompiler:
                             else:
                                 self.output[0] = f"{self.output[0]}{comment}"
                         for line in self.output:
-                            target.write(f"{line}\n")
+                            target.write(f"{leading_ws}{line}\n")
                         self.output.clear()
             
             if in_asm:
