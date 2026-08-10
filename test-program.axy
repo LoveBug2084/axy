@@ -38,7 +38,9 @@
 	space = ' '			; character constant (ASCII value)
 
 					; unused string constant in this source file but defined in beebasm for others to use
-	welcomeMessage = "Hello and welcome to our resturant"
+	welcomeMessage = "Welcome to axy compiler"
+	dummy = welcomeMessage
+
 
 ; ============================================
 ; Test 1: Basic assignment (number constants)
@@ -56,7 +58,7 @@
 ; Test 2: Constants referenced by name
 ; ============================================
 
-	org alt_start_addr
+	ORG alt_start_addr		; test uppercase keyword
 	
 .test2
 

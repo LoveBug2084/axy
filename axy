@@ -116,7 +116,7 @@ class AXYCompiler:
                 return parse_number(text)
             except ValueError:
                 pass
-            sym = self.symbols.get(text.lower())
+            sym = self.symbols.get(text)
             if sym is None or sym['type'] != 'const':
                 return None
             text = sym['lit']
@@ -125,11 +125,12 @@ class AXYCompiler:
                 return None
 
     def process_declaration(self, line_num, tokens, cols):
-        if tokens[0] == 'var':
+        tokenLower = tokens[0].lower()
+        if tokenLower == 'var':
             if len(tokens) != 2:
                 self._error(line_num, 0, "'var' needs exactly one name")
                 return
-            name = tokens[1].lower()
+            name = tokens[1]
             if name in ('a', 'x', 'y'):
                 self._error(line_num, cols[1], f"'{name}' is a reserved register")
                 return
@@ -144,7 +145,7 @@ class AXYCompiler:
             self.symbols[name] = {'type': 'var', 'addr': addr}
             return
         
-        elif tokens[0] == 'const':
+        elif tokenLower == 'const':
             if len(tokens) != 4 or tokens[2] != '=':
                 self._error(line_num, 0, "Expected 'const name = value'")
                 return
@@ -152,8 +153,8 @@ class AXYCompiler:
             return
 
     def _define_const(self, name, lit, line_num, col):
-        name = name.lower()
-        if name in ('a', 'x', 'y'):
+        nameLower = name.lower()
+        if nameLower in ('a', 'x', 'y'):
             self._error(line_num, col, f"'{name}' is a reserved register")
             return False
         if name in self.symbols:
@@ -164,12 +165,14 @@ class AXYCompiler:
 
     def process_statement(self, line_num, tokens, cols):
         # Labels
+        tokenLower = tokens[0].lower()
+
         if len(tokens) == 1 and tokens[0].startswith('.'):
             self.output.append(tokens[0])
             return
         
         # Jmp
-        if tokens[0] == 'jmp':
+        if tokenLower == 'jmp':
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jmp label' expected")
                 return
@@ -177,7 +180,7 @@ class AXYCompiler:
             return
         
         # Jsr
-        if tokens[0] == 'jsr':
+        if tokenLower == 'jsr':
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jsr label' expected")
                 return
@@ -185,7 +188,7 @@ class AXYCompiler:
             return
         
         # Rts
-        if tokens[0] == 'rts':
+        if tokenLower == 'rts':
             if len(tokens) != 1:
                 self._error(line_num, 0, "'rts' takes no arguments")
                 return
@@ -193,23 +196,23 @@ class AXYCompiler:
             return
         
         # If statement
-        if tokens[0] == 'if':
+        if tokenLower == 'if':
             return self.process_if(line_num, tokens, cols)
         
         # While
-        if tokens[0] == 'while':
+        if tokenLower == 'while':
             return self.process_while(line_num, tokens, cols)
         
         # Repeat
-        if tokens[0] == 'repeat':
+        if tokenLower == 'repeat':
             return self.process_repeat(line_num, tokens, cols)
         
         # Until
-        if tokens[0] == 'until':
+        if tokenLower == 'until':
             return self.process_until(line_num, tokens, cols)
         
         # Endif
-        if tokens[0] == 'endif':
+        if tokenLower == 'endif':
             if len(tokens) != 1:
                 self._error(line_num, 0, "'endif' takes no arguments")
                 return
@@ -221,7 +224,7 @@ class AXYCompiler:
             return
         
         # Endwhile
-        if tokens[0] == 'endwhile':
+        if tokenLower == 'endwhile':
             if len(tokens) != 1:
                 self._error(line_num, 0, "'endwhile' takes no arguments")
                 return
@@ -254,7 +257,7 @@ class AXYCompiler:
             self._error(line_num, 0, "Expected 'if reg op value'")
             return
         
-        left = tokens[1].lower()
+        left = tokens[1]
         op = tokens[2]
         val = tokens[3]
         
@@ -278,7 +281,7 @@ class AXYCompiler:
             self._error(line_num, 0, "Expected 'while reg op value'")
             return
         
-        left = tokens[1].lower()
+        left = tokens[1]
         op = tokens[2]
         val = tokens[3]
         
@@ -322,7 +325,7 @@ class AXYCompiler:
             return
         start_label, end_label = self.repeat_stack.pop()
         
-        left = tokens[1].lower()
+        left = tokens[1]
         op = tokens[2]
         val = tokens[3]
         
@@ -379,7 +382,7 @@ class AXYCompiler:
         return True
 
     def process_incdec(self, line_num, tokens, cols):
-        name = tokens[0].lower()
+        name = tokens[0]
         op = tokens[1]
         amount = parse_number(tokens[2])
         
@@ -414,8 +417,8 @@ class AXYCompiler:
             self._error(line_num, cols[2], "Only +=1 and -=1 supported")
 
     def process_assignment(self, line_num, tokens, cols):
-        dest = tokens[0].lower()
-        src = tokens[2].lower()
+        dest = tokens[0]
+        src = tokens[2]
         
         if dest not in self.symbols:
             self._error(line_num, cols[0], f"Undefined symbol '{dest}'")
@@ -507,22 +510,24 @@ class AXYCompiler:
         in_asm = False
         for line_num, tokens, raw, cols in self.read_lines(filename):
             self.current_raw = raw
-            if tokens[0] == 'asm':
+            tokenLower = tokens[0].lower()
+
+            if tokenLower == 'asm':
                 in_asm = True
                 continue
-            if tokens[0] == 'endasm':
+            if tokenLower == 'endasm':
                 in_asm = False
                 continue
             if in_asm:
                 continue
-            if tokens[0] in ('var', 'const'):
+            if tokenLower in ('var', 'const'):
                 self.process_declaration(line_num, tokens, cols)
-            elif tokens[0] == 'org':
+            elif tokenLower == 'org':
                 if len(tokens) != 2:
                     self._error(line_num, 0, "Expected 'org <address>'")
                 else:
                     self.org = tokens[1]
-            elif tokens[0] == 'axyvar':
+            elif tokenLower == 'axyvar':
                 if len(tokens) != 2:
                     self._error(line_num, 0, "Expected 'axyvar <address>'")
                     continue
@@ -533,8 +538,8 @@ class AXYCompiler:
                 self.next_var = addr
             elif (len(tokens) == 3 and tokens[1] == '='
                     and not tokens[0].startswith('.')
-                    and tokens[0].lower() not in self.symbols
-                    and tokens[0].lower() not in KEYWORDS):
+                    and tokens[0] not in self.symbols
+                    and tokenLower not in KEYWORDS):
                 if self._define_const(tokens[0], tokens[2], line_num, cols[0]):
                     self.const_def_lines.add(line_num)
         
@@ -544,7 +549,7 @@ class AXYCompiler:
         # Pass 2: statements (stream output as each line generates code)
         target = open(outfile, 'w') if outfile else sys.stdout
         try:
-            target.write(f"; Generated by AXY Compiler {timestamp()}\n")
+            target.write(f"; Generated by axy compiler {timestamp()}\n")
             target.write("\n")
             
             in_asm = False
@@ -574,29 +579,30 @@ class AXYCompiler:
                     tokens, cols = self.tokenize(stripped)
                     if not tokens:
                         continue
-                    if tokens[0] == 'asm':
+                    tokenLower = tokens[0].lower()
+                    if tokenLower == 'asm':
                         if len(tokens) != 1:
                             self._error(line_num, 0, "'asm' takes no arguments")
                             return False
                         in_asm = True
                         continue
-                    if tokens[0] == 'endasm':
+                    if tokenLower == 'endasm':
                         self._error(line_num, 0, "'endasm' without matching 'asm'")
                         return False
-                    if tokens[0] == 'var':
-                        sym = self.symbols[tokens[1].lower()]
-                        target.write(f"{leading_ws}{tokens[1].lower()} = &{sym['addr']:02X}{comment}\n")
+                    if tokenLower == 'var':
+                        sym = self.symbols[tokens[1]]
+                        target.write(f"{leading_ws}{tokens[1]} = &{sym['addr']:02X}{comment}\n")
                         continue
-                    if tokens[0] == 'const':
-                        target.write(f"{leading_ws}{tokens[1].lower()} = {tokens[3]}{comment}\n")
+                    if tokenLower == 'const':
+                        target.write(f"{leading_ws}{tokens[1]} = {tokens[3]}{comment}\n")
                         continue
-                    if tokens[0] == 'org':
-                        target.write(f"{leading_ws}org {tokens[1]}{comment}\n")
+                    if tokenLower == 'org':
+                        target.write(f"{leading_ws}{tokens[0]} {tokens[1]}{comment}\n")
                         continue
                     if line_num in self.const_def_lines:
-                        target.write(f"{leading_ws}{tokens[0].lower()} = {tokens[2]}{comment}\n")
+                        target.write(f"{leading_ws}{tokens[0]} = {tokens[2]}{comment}\n")
                         continue
-                    if tokens[0] not in ('var', 'const', 'org', 'axyvar'):
+                    if tokenLower not in ('var', 'const', 'org', 'axyvar'):
                         self.process_statement(line_num, tokens, cols)
                         if self.errors:
                             return False
@@ -664,13 +670,13 @@ def main():
     args = [arg for arg in sys.argv[1:] if arg != '-v']
     verbose = len(args) != len(sys.argv) - 1
     if not args:
-        print("AXY Compiler")
-        print("Usage: ./axy.py [-v] input.axy [output.asm]")
-        print("If no output file is given, the generated assembly is written to stdout.")
+        print("axy compiler")
+        print("usage: axy [-v] input.axy [output.asm]")
+        print("if no output file is given, the generated assembly is written to stdout.")
         print()
-        print("  -v                  - Print the symbol report after compiling")
+        print("  -v                  - print the symbol report after compiling")
         print()
-        print("Features: (see README.md for complete details)")
+        print("features: (see README.md for complete details)")
         print("  org <address>       - Set program start address")
         print("  axyvar <address>    - Set variable allocation start address")
         print("  var name            - Declare variable")
@@ -683,6 +689,8 @@ def main():
         print("  jsr label           - Jump to subroutine")
         print("  rts                 - Return from subroutine")
         print("  if reg == value     - Conditional branch")
+        print("  endif               - End of if block")
+        print("  if name != name     - Conditional branch")
         print("  endif               - End of if block")
         print("  while reg != value  - While loop")
         print("  endwhile            - End of while loop")
