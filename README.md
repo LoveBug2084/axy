@@ -55,8 +55,8 @@ declaration line is reported by BeebAsm as an undefined symbol.
 
 No entry or exit labels are generated automatically: labels such as `.start`
 or `.end` are chosen by the user in the source. The only labels generated
-automatically are the internal for the `if`/`endif` `while`/`endwhile` and
-`repeat`/`until`; they are defined inside BeebAsm `{ }` blocks, so they are
+automatically are for the internal `if`/`endif` `while`/`endwhile` and
+`repeat`/`until` structures; they are defined inside BeebAsm `{ }` blocks, so they are
 block-local and never conflict when several AXY programs are assembled
 together.
 
