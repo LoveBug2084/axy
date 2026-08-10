@@ -290,11 +290,11 @@ Rules:
 `==` compiles to a `bne` to the end of the block (skip the body when not
 equal); `!=` compiles to a `beq`.
 
-The body of an `if` (and of a `while`) is wrapped in BeebAsm `{ }` braces, and
-the internal `.endifN`/`.endwhileN` labels are block-local, so several AXY
-programs can be assembled together without label conflicts. Branches reference
-these labels with the bare name (`bne endif1`) — a dot is only prefixed when a
-label is first defined.
+The body of an `if`, `while`, and `repeat` is wrapped in BeebAsm `{ }` braces,
+and the internal `.endifN`/`.endwhileN`/`.enduntilN` labels are block-local, so
+several AXY programs can be assembled together without label conflicts.
+Branches reference these labels with the bare name (`bne endif1`) — a dot is
+only prefixed when a label is first defined.
 
 ## While loop
 
@@ -305,6 +305,22 @@ endwhile
 ```
 
 Uses the same operators and operand rules as `if`.
+
+## Repeat loop
+
+```
+repeat
+    ...
+until left op value
+```
+
+Like a `while`, but the condition is tested **after** the body, so the body
+always runs at least once. `until` loops back while the condition is **false**
+and falls through when it is **true** (the opposite of `while`), which is why
+`until left == value` compiles to a `bne` back to the top of the block and
+`until left != value` to a `beq`.
+
+Uses the same operators and operand rules as `if` and `while`.
 
 ## Assembler mode (`asm` / `endasm`)
 
@@ -375,6 +391,13 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-10 — repeat / until loop
+
+- `repeat` ... `until left op value` adds a do-until loop: the body always runs
+  at least once, `until` tests the condition after the body, loops back while it
+  is false, and falls through when it is true. Compiles to a `.repeatN` /
+  `.enduntilN` block with a `bne`/`beq` back to the top.
 
 ## 2026-08-10 — blank lines preserved in generated output
 

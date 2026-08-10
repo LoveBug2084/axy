@@ -177,6 +177,22 @@ secret = &47            ; constant defined in raw asm
 a = secret                  ; LDA #secret - asm-defined constant
 
 ; ============================================
+; Test 11: Repeat / until loop
+; ============================================
+; The body always runs at least once; until tests after the body and loops
+; back while the condition is false.
+
+counter = 3
+repeat
+	counter -= 1
+until counter == 0
+
+counter = 3
+repeat
+	counter -= 1
+until counter != 2
+
+; ============================================
 ; Final - all tests passed
 ; ============================================
 
