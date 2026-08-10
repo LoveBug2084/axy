@@ -671,7 +671,7 @@ def main():
         print("  axyvar <address>    - Set variable allocation start address")
         print("  var name            - Declare variable")
         print("  name = value        - Defines a constant (if name not already defined)")
-        print("  name = value        - Assignment to variable")
+        print("  name = value        - Assignment to variable if variable name already defined")
         print("  name += 1           - Increment")
         print("  name -= 1           - Decrement")
         print("  .name               - Define label")
