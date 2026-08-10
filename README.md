@@ -1,0 +1,395 @@
+# AXY Language Specification
+
+AXY is a small medium-level language that compiles to BeebAsm 6502 assembly.
+The name comes from the 6502 registers A, X and Y.
+
+## Usage
+
+```
+./axy [-v] input.axy [output.asm]
+```
+
+- `input.axy` is the source file.
+- `output.asm` is optional. If given, the generated assembly is written to
+  that file. If omitted, it is written to stdout (the symbol report goes to
+  stderr, keeping stdout a pure assembly stream).
+- `-v` (before the file names) prints the symbol report after compiling:
+  the allocated variable addresses and every declared constant. Without it
+  the compiler is silent on success.
+- The compiler refuses to run if the input and output are the same file.
+
+### `.axyvar` — variable base across files
+
+When the compiler starts it looks for a file named `.axyvar` in the current
+directory. If present and readable as a number, its value initialises the
+variable address counter, so a source that declares `var` without an
+`axyvar` of its own continues from where the previous file ended. After a
+successful compile the current counter value is written back to `.axyvar`.
+
+There is no default variable base: declaring a `var` when no base has been
+set — no `axyvar` in the source and no usable `.axyvar` file — reports an
+error. An explicit `axyvar <address>` in the source always overrides the
+`.axyvar` value and re-anchors the chain. `.axyvar` is not committed to
+version control.
+
+## Generated output
+
+The compiler produces a BeebAsm source file:
+
+- header comment
+- `var` definitions and constants as BeebAsm symbols (`lives = &70`,
+  `max = 5`, `greeting = "Hello"`), including ones never used in the code
+- `org <address>` if specified in the source (see below)
+- the generated code
+
+No entry or exit labels are generated automatically: labels such as `.start`
+or `.end` are chosen by the user in the source. The only labels generated
+automatically are the internal `if`/`while` ones (`.endif1`, `.while2`,
+`.endwhile3`, ...); they are defined inside BeebAsm `{ }` blocks, so they are
+block-local and never conflict when several AXY programs are assembled
+together.
+
+Output is written as compilation progresses:
+
+- **Success:** a complete `.asm` file.
+- **Statement error:** a partial `.asm` containing everything generated up
+  to the failing line.
+- **Declaration error or missing input file:** no `.asm` is created.
+
+## Comments
+
+Lines beginning with `;` and any text after `;` on a line are comments.
+
+```
+; this is a comment
+a = 42          ; comment after code
+```
+
+## Numbers
+
+Number literals can be written in three bases:
+
+- decimal, no prefix: `42`
+- hexadecimal, `&` prefix: `&2A`
+- binary, `%` prefix: `%101`
+
+```
+a = 42          ; lda #42
+a = &2A         ; lda #&2A
+a = %101        ; lda #%101
+```
+
+The notation you write is preserved in the generated assembly for number
+literals in assignments and `if`/`while` comparisons. A malformed literal
+(e.g. `&GG` or `%2`) reports `Invalid number`.
+
+## Program start (`org`)
+
+```
+org <address>
+```
+
+Sets the program start address in the generated assembly. `<address>` is
+passed through to BeebAsm as-is, so it may be a number in any supported base
+(decimal, `&` hex, or `%` binary), a number constant, or any other BeebAsm
+symbol:
+
+```
+org &2000
+org 1234
+org %1111000000000000
+org base                ; const base = &1900
+```
+
+If `<address>` names a constant, the constant is emitted as a symbol in the
+header, so a chain like `org_addr = base` with `base = &1900` emits
+`org org_addr` and BeebAsm resolves it.
+
+If no `org` is given, no `org` line is generated. Only one `org` is allowed.
+
+## Variable start (`axyvar`)
+
+```
+axyvar <address>
+```
+
+Sets the address of the next variable declared with `var`. It can appear
+anywhere in the file, at any time: variables declared before it keep their
+addresses, and variables declared after it continue from the new base. If no
+`axyvar` is given, the `.axyvar` file (see Usage) sets the base; with neither,
+declaring a `var` is an error.
+
+`<address>` may be a number in any supported base (decimal, `&` hex, or `%`
+binary), or the name of a constant declared earlier in the file (chains are
+resolved too):
+
+```
+axyvar &70
+axyvar 1234
+axyvar base                ; const base = &40
+```
+
+`axyvar` generates no assembly of its own; it only controls the addresses the
+compiler assigns to `var`. The compiler does not range-check the value —
+BeebAsm reports any address that is out of range for the instruction.
+
+## Declarations
+
+### var
+
+```
+var name
+```
+
+Declares a variable. Variables are allocated sequentially, starting at the
+address set by the `axyvar` directive or the `.axyvar` file (see Usage);
+there is no default base, so declaring a `var` before either has set one is
+an error. The registers `a`, `x`, `y` cannot be used as variable
+names, and a name can only be declared once.
+
+### const
+
+```
+const name = value
+```
+
+Declares a compile-time constant. The `const` keyword is optional: any line
+`name = value` where `name` is not already declared (variable, register, or
+constant) and is not a keyword also declares a constant. A `var` must be
+declared before its first assignment if it is to stay a variable. Constants
+are immutable: a later `name = number` or `name += 1` reports an error, and
+a name can only be declared once.
+
+A constant is emitted once as a BeebAsm symbol in the generated output,
+keeping the notation you wrote in (`max = 5`, `base = &1900`,
+`greeting = "Hello and welcome"`). Uses reference the constant by name:
+`if score == max` compiles to `cmp #max`, and `a = max` compiles to
+`lda #max`. All constants are emitted, including unused ones.
+
+A constant may hold another constant's name (`maximum = limit`); the chain
+resolves inside BeebAsm, so constants can even be shared across files that
+are assembled together.
+
+## Registers
+
+The 6502 registers `a`, `x`, `y` are reserved and cannot be redeclared.
+They can be assigned to, compared, and used with `+= 1` / `-= 1`.
+
+## Assignment
+
+```
+dest = src
+```
+
+Copies `src` into `dest`. `dest` may be a register or variable; `src` may be
+a register, variable, number literal, or constant (`#name`).
+
+## Increment / Decrement
+
+```
+name += 1
+name -= 1
+```
+
+Only `+= 1` and `-= 1` are supported. For `x`/`y` this compiles to
+`inx`/`dex`/`iny`/`dey`; for variables it compiles to `inc name`/`dec name`.
+`a += 1` is not supported.
+
+## Labels and jumps
+
+A label is defined by a line consisting of a dot followed by the label name.
+The line is passed through to the assembly output as-is.
+
+```
+.loop
+```
+
+References use `jmp` with the bare name (no dot).
+
+```
+jmp loop
+```
+
+compiles to
+
+```
+jmp loop
+```
+
+Subroutine calls use `jsr` with the bare name; `rts` returns from a
+subroutine.
+
+```
+jsr subroutine
+rts
+```
+
+compile to
+
+```
+jsr subroutine
+rts
+```
+
+The dot is only used when defining a label; references never use it. The
+compiler does not check that a referenced label exists — it is passed
+through and resolved by the assembler.
+
+## If statement
+
+```
+if left op value
+    ...
+endif
+```
+
+Operators: `==` (equal) and `!=` (not equal).
+
+- `left` may be a register (`a`, `x`, `y`) or a variable.
+- `value` may be a number literal, a constant, or a variable.
+
+Comparison compilation:
+
+| Source                     | Emitted                    |
+|----------------------------|----------------------------|
+| `if a == var`              | `cmp var`                  |
+| `if a == 5`                | `cmp #5`                   |
+| `if x == var`              | `cpx var`                  |
+| `if x == const`            | `cpx #constname`           |
+| `if y == var`              | `cpy var`                  |
+| `if y == 5`                | `cpy #5`                   |
+| `if var == 10`             | `lda var` / `cmp #10`      |
+| `if var == othervar`       | `lda var` / `cmp othervar` |
+| `if var == const`          | `lda var` / `cmp #constname` |
+
+Rules:
+
+- Register on the left: compare that register directly (`cmp`/`cpx`/`cpy`).
+- Variable on the left: load it into A first (`lda var`), then `cmp`.
+- Right side: a number literal compiles to an immediate (`#value`), a constant
+  is referenced by name (`#constname`), and a variable stays as a bare memory
+  operand.
+
+`==` compiles to a `bne` to the end of the block (skip the body when not
+equal); `!=` compiles to a `beq`.
+
+The body of an `if` (and of a `while`) is wrapped in BeebAsm `{ }` braces, and
+the internal `.endifN`/`.endwhileN` labels are block-local, so several AXY
+programs can be assembled together without label conflicts. Branches reference
+these labels with the bare name (`bne endif1`) — a dot is only prefixed when a
+label is first defined.
+
+## While loop
+
+```
+while left op value
+    ...
+endwhile
+```
+
+Uses the same operators and operand rules as `if`.
+
+## Errors
+
+Errors print the offending source line with a `^` marker under the position,
+followed by `Line N: message`:
+
+```
+temp += 3
+        ^
+Line 2: Only +=1 and -=1 supported
+```
+
+## Example
+
+```
+var count
+const target = 5
+
+count = 0
+.loop
+    if count == target
+        jmp done
+    endif
+    count += 1
+    jmp loop
+.done
+    a = count
+```
+
+## Status
+
+| Feature                    | Status                                   |
+|----------------------------|------------------------------------------|
+| `var` / `const`            | implemented                              |
+| assignment                 | implemented                              |
+| `+= 1` / `-= 1`            | implemented                              |
+| labels (`.name`)           | implemented                              |
+| `jmp`                      | implemented                              |
+| `jsr` / `rts`              | implemented                              |
+| `if ... endif`             | implemented                              |
+| `while ... endwhile`       | implemented                              |
+
+---
+
+# Change Log
+
+## 2026-08-10 — `.axyvar` state file
+
+- On startup the compiler reads `.axyvar` from the current directory; if it
+  holds a valid number it initialises the variable address counter, so a
+  source that declares `var` without an `axyvar` of its own continues from
+  where the previous file ended.
+- After a successful compile the current counter value is written back to
+  `.axyvar`. Failed compiles leave it untouched, and an explicit `axyvar` in
+  the source overrides the file's value and re-anchors the chain.
+
+## 2026-08-10 — constants as BeebAsm symbols
+
+- Constants are emitted once as BeebAsm symbols in the generated output,
+  before the `org` line, keeping the notation they were written in
+  (`max = 5`, `base = &1900`, `greeting = "Hello"`).
+- Uses reference a constant by name: `a = max` emits `lda #max`, and
+  `if score == max` emits `cmp #max`. Constant chains (`maximum = limit`)
+  resolve in BeebAsm, and constants may be shared across files assembled
+  together.
+- The `const` keyword is optional: any `name = value` line where the name is
+  not already declared and is not a keyword declares a constant.
+- Constants are immutable: reassignment or `+=`/`-=` on one reports an error.
+
+## 2026-08-10 — `org` and `axyvar` directives
+
+- `org <address>` sets the program start address. The argument is passed
+  through verbatim, so it may be a number in any base or any BeebAsm symbol.
+  If no `org` is given, none is generated.
+- `axyvar <address>` sets the address of the next `var` declaration. It may
+  appear anywhere in the file; a mid-file `axyvar` resets the base for
+  subsequent variables only. The argument may be a number or the name of a
+  constant declared earlier.
+- `var` has no default base address: allocating one requires an `axyvar` in
+  the source or a `.axyvar` file. The compiler performs no range checking on
+  variable addresses — BeebAsm reports any that are out of range.
+
+## 2026-08-10 — labels
+
+- A label is defined with a dot (`.loop`) but every reference to it is bare
+  (`jmp loop`, `bne endif1`); the dot is only ever prefixed when the label is
+  first defined.
+- The compiler generates no automatic labels; the source supplies its own, so
+  several AXY programs can be assembled together by BeebAsm.
+- The internal labels generated for `if`/`while` are wrapped in BeebAsm
+  `{ }` braces, making them block-local so they never collide across programs.
+
+## 2026-08-09 — initial compiler
+
+- Translates `.axy` files to BeebAsm 6502 assembly: declarations (`var`,
+  `const`), assignment (`a = 5`, `score = value`), `+= 1` / `-= 1`, `jmp`,
+  `jsr` / `rts`, `if ... endif`, and `while ... endwhile`.
+- Number literals accept decimal, `&` hex and `%` binary; the notation is
+  preserved in the generated output.
+- Two-pass streaming compilation: a declarations pass then a statements pass,
+  each reading the source one line at a time. Errors show the offending line
+  with a `^` marker.
+- Output is written to the given file, or to stdout when none is given;
+  writing over the input file is rejected.
+- The generated output header carries a timestamp.

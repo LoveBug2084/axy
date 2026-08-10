@@ -1,0 +1,614 @@
+#!/usr/bin/env python3
+"""
+AXY Compiler - Translates .axy files to BeebAsm 6502 assembly
+Named after the 6502 registers: A, X, Y
+"""
+
+import datetime
+import os
+import sys
+
+def timestamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+def parse_number(text):
+    if text.startswith('&'):
+        return int(text[1:], 16)
+    if text.startswith('%'):
+        return int(text[1:], 2)
+    return int(text, 10)
+
+KEYWORDS = ('var', 'const', 'org', 'axyvar', 'if', 'endif', 'while',
+            'endwhile', 'jmp', 'jsr', 'rts', 'goto')
+
+class AXYCompiler:
+    def __init__(self):
+        self.symbols = {}
+        self.next_var = None
+        self.output = []
+        self.errors = []
+        self.current_raw = None
+        self.label_counter = 0
+        self.org = None
+        self.const_def_lines = set()
+        
+        # Pre-declare registers
+        self.symbols['a'] = {'type': 'reg', 'name': 'A'}
+        self.symbols['x'] = {'type': 'reg', 'name': 'X'}
+        self.symbols['y'] = {'type': 'reg', 'name': 'Y'}
+
+    def tokenize(self, line):
+        if ';' in line:
+            line = line[:line.index(';')]
+        line = line.strip()
+        if not line:
+            return [], []
+        
+        tokens = []
+        cols = []
+        current = ""
+        start_col = 0
+        i = 0
+        while i < len(line):
+            c = line[i]
+            if c.isspace():
+                if current:
+                    tokens.append(current)
+                    cols.append(start_col)
+                    current = ""
+                i += 1
+            elif c in '+-*/=<>!':
+                op = c
+                op_col = i
+                i += 1
+                if i < len(line) and line[i] in '+=-><=!':
+                    op += line[i]
+                    i += 1
+                if current:
+                    tokens.append(current)
+                    cols.append(start_col)
+                    current = ""
+                tokens.append(op)
+                cols.append(op_col)
+            else:
+                if not current:
+                    start_col = i
+                current += c
+                i += 1
+                if c in '\'"' and len(current) == 1:
+                    while i < len(line) and line[i] != c:
+                        current += line[i]
+                        i += 1
+                    if i < len(line):
+                        current += line[i]
+                        i += 1
+        if current:
+            tokens.append(current)
+            cols.append(start_col)
+        return tokens, cols
+
+    def read_lines(self, filename):
+        try:
+            with open(filename, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line or line.startswith(';'):
+                        continue
+                    tokens, cols = self.tokenize(line)
+                    if not tokens:
+                        continue
+                    yield line_num, tokens, line, cols
+        except FileNotFoundError:
+            self.errors.append((None, 0, f"File not found: {filename}", None))
+
+    def _error(self, line_num, col, msg):
+        self.errors.append((line_num, col, msg, self.current_raw))
+
+    def new_label(self, prefix="L"):
+        self.label_counter += 1
+        return f".{prefix}{self.label_counter}"
+
+    def resolve_address(self, text):
+        hops = 0
+        while True:
+            try:
+                return parse_number(text)
+            except ValueError:
+                pass
+            sym = self.symbols.get(text.lower())
+            if sym is None or sym['type'] != 'const':
+                return None
+            text = sym['lit']
+            hops += 1
+            if hops > 100:
+                return None
+
+    def process_declaration(self, line_num, tokens, cols):
+        if tokens[0] == 'var':
+            if len(tokens) != 2:
+                self._error(line_num, 0, "'var' needs exactly one name")
+                return
+            name = tokens[1].lower()
+            if name in ('a', 'x', 'y'):
+                self._error(line_num, cols[1], f"'{name}' is a reserved register")
+                return
+            if name in self.symbols:
+                self._error(line_num, cols[1], f"'{name}' already defined")
+                return
+            if self.next_var is None:
+                self._error(line_num, 0, "No address set for variables - use 'axyvar <address>' or a .axyvar file")
+                return
+            addr = self.next_var
+            self.next_var += 1
+            self.symbols[name] = {'type': 'var', 'addr': addr}
+            return
+        
+        elif tokens[0] == 'const':
+            if len(tokens) != 4 or tokens[2] != '=':
+                self._error(line_num, 0, "Expected 'const name = value'")
+                return
+            self._define_const(tokens[1], tokens[3], line_num, cols[1])
+            return
+
+    def _define_const(self, name, lit, line_num, col):
+        name = name.lower()
+        if name in ('a', 'x', 'y'):
+            self._error(line_num, col, f"'{name}' is a reserved register")
+            return False
+        if name in self.symbols:
+            self._error(line_num, col, f"'{name}' already defined")
+            return False
+        self.symbols[name] = {'type': 'const', 'lit': lit}
+        return True
+
+    def process_statement(self, line_num, tokens, cols):
+        # Labels
+        if len(tokens) == 1 and tokens[0].startswith('.'):
+            self.output.append(tokens[0])
+            return
+        
+        # Jmp
+        if tokens[0] == 'jmp':
+            if len(tokens) != 2:
+                self._error(line_num, 0, "'jmp label' expected")
+                return
+            self.output.append(f"\tjmp {tokens[1]}")
+            return
+        
+        # Jsr
+        if tokens[0] == 'jsr':
+            if len(tokens) != 2:
+                self._error(line_num, 0, "'jsr label' expected")
+                return
+            self.output.append(f"\tjsr {tokens[1]}")
+            return
+        
+        # Rts
+        if tokens[0] == 'rts':
+            if len(tokens) != 1:
+                self._error(line_num, 0, "'rts' takes no arguments")
+                return
+            self.output.append("\trts")
+            return
+        
+        # If statement
+        if tokens[0] == 'if':
+            return self.process_if(line_num, tokens, cols)
+        
+        # While
+        if tokens[0] == 'while':
+            return self.process_while(line_num, tokens, cols)
+        
+        # Endif
+        if tokens[0] == 'endif':
+            if len(tokens) != 1:
+                self._error(line_num, 0, "'endif' takes no arguments")
+                return
+            if not self.if_stack:
+                self._error(line_num, 0, "'endif' without matching 'if'")
+                return
+            self.output.append(self.if_stack.pop())
+            self.output.append("}")
+            return
+        
+        # Endwhile
+        if tokens[0] == 'endwhile':
+            if len(tokens) != 1:
+                self._error(line_num, 0, "'endwhile' takes no arguments")
+                return
+            if not self.while_stack:
+                self._error(line_num, 0, "'endwhile' without matching 'while'")
+                return
+            start_label, end_label = self.while_stack.pop()
+            self.output.append(f"\tjmp {start_label[1:]}")
+            self.output.append(end_label)
+            self.output.append("}")
+            return
+        
+        # name += 1 or name -= 1
+        if len(tokens) == 3 and tokens[1] in ('+=', '-='):
+            try:
+                parse_number(tokens[2])
+            except ValueError:
+                self._error(line_num, cols[2], "Invalid number")
+                return
+            return self.process_incdec(line_num, tokens, cols)
+        
+        # name = value
+        if len(tokens) == 3 and tokens[1] == '=':
+            return self.process_assignment(line_num, tokens, cols)
+        
+        self._error(line_num, 0, "Unrecognized statement")
+
+    def process_if(self, line_num, tokens, cols):
+        if len(tokens) != 4:
+            self._error(line_num, 0, "Expected 'if reg op value'")
+            return
+        
+        left = tokens[1].lower()
+        op = tokens[2]
+        val = tokens[3]
+        
+        if not self._gen_compare(line_num, cols[3], left, val):
+            return
+        end_label = self.new_label("endif")
+        
+        self.output.append("{")
+        if op == '==':
+            self.output.append(f"\tbne {end_label[1:]}")
+        elif op == '!=':
+            self.output.append(f"\tbeq {end_label[1:]}")
+        else:
+            self._error(line_num, cols[2], f"Unsupported operator '{op}'")
+            return
+        
+        self.if_stack.append(end_label)
+
+    def process_while(self, line_num, tokens, cols):
+        if len(tokens) != 4:
+            self._error(line_num, 0, "Expected 'while reg op value'")
+            return
+        
+        left = tokens[1].lower()
+        op = tokens[2]
+        val = tokens[3]
+        
+        start_label = self.new_label("while")
+        end_label = self.new_label("endwhile")
+        
+        self.output.append("{")
+        self.output.append(f"{start_label}")
+        if not self._gen_compare(line_num, cols[3], left, val):
+            return
+        
+        if op == '==':
+            self.output.append(f"\tbne {end_label[1:]}")
+        elif op == '!=':
+            self.output.append(f"\tbeq {end_label[1:]}")
+        else:
+            self._error(line_num, cols[2], f"Unsupported operator '{op}'")
+            return
+        
+        self.while_stack.append((start_label, end_label))
+
+    def _gen_compare(self, line_num, col, left, val):
+        left_sym = self.symbols.get(left)
+        if left_sym is not None and left_sym['type'] == 'reg':
+            reg = left
+        else:
+            if left_sym is not None and left_sym['type'] == 'var':
+                self.output.append(f"\tlda {left}")
+            else:
+                self.output.append(f"\tlda #{left}")
+            reg = 'a'
+        
+        try:
+            parse_number(val)
+            operand = f"#{val}"
+        except ValueError:
+            if val in self.symbols:
+                sym = self.symbols[val]
+                if sym['type'] == 'const':
+                    operand = f"#{val}"
+                elif sym['type'] == 'var':
+                    operand = val
+                else:
+                    self._error(line_num, col, f"Cannot compare '{left}' with register '{val}'")
+                    return False
+            else:
+                if val.startswith('&') or val.startswith('%'):
+                    self._error(line_num, col, f"Invalid number '{val}'")
+                    return False
+                operand = f"#{val}"
+        
+        if reg == 'a':
+            self.output.append(f"\tcmp {operand}")
+        elif reg == 'x':
+            self.output.append(f"\tcpx {operand}")
+        elif reg == 'y':
+            self.output.append(f"\tcpy {operand}")
+        return True
+
+    def process_incdec(self, line_num, tokens, cols):
+        name = tokens[0].lower()
+        op = tokens[1]
+        amount = parse_number(tokens[2])
+        
+        if name not in self.symbols:
+            self._error(line_num, cols[0], f"Undefined symbol '{name}'")
+            return
+        
+        sym = self.symbols[name]
+        
+        if sym['type'] == 'reg':
+            if name == 'x' and op == '+=' and amount == 1:
+                self.output.append("\tinx")
+            elif name == 'x' and op == '-=' and amount == 1:
+                self.output.append("\tdex")
+            elif name == 'y' and op == '+=' and amount == 1:
+                self.output.append("\tiny")
+            elif name == 'y' and op == '-=' and amount == 1:
+                self.output.append("\tdey")
+            else:
+                self._error(line_num, cols[2], "Only +/- 1 supported for X/Y")
+            return
+        
+        if sym['type'] == 'const':
+            self._error(line_num, cols[0], f"'{name}' is a constant and cannot be changed")
+            return
+        
+        if op == '+=' and amount == 1:
+            self.output.append(f"\tinc {name}")
+        elif op == '-=' and amount == 1:
+            self.output.append(f"\tdec {name}")
+        else:
+            self._error(line_num, cols[2], "Only +=1 and -=1 supported")
+
+    def process_assignment(self, line_num, tokens, cols):
+        dest = tokens[0].lower()
+        src = tokens[2].lower()
+        
+        if dest not in self.symbols:
+            self._error(line_num, cols[0], f"Undefined symbol '{dest}'")
+            return
+        
+        dest_sym = self.symbols[dest]
+        
+        if dest_sym['type'] == 'const':
+            self._error(line_num, cols[0], f"'{dest}' is a constant and cannot be reassigned")
+            return
+        
+        if src not in self.symbols:
+            try:
+                parse_number(src)
+            except ValueError:
+                if src.startswith('&') or src.startswith('%'):
+                    self._error(line_num, cols[2], f"Invalid number '{src}'")
+                    return
+                self._gen_assign_immediate(dest, dest_sym, src)
+                return
+            self._gen_assign_immediate(dest, dest_sym, src)
+            return
+        
+        src_sym = self.symbols[src]
+        if src_sym['type'] == 'const':
+            self._gen_assign_immediate(dest, dest_sym, src)
+        else:
+            self._gen_assign(dest, dest_sym, src, src_sym)
+
+    def _gen_assign_immediate(self, dest, dest_sym, lit):
+        if dest_sym['type'] == 'reg':
+            if dest == 'a':
+                self.output.append(f"\tlda #{lit}")
+            elif dest == 'x':
+                self.output.append(f"\tldx #{lit}")
+            elif dest == 'y':
+                self.output.append(f"\tldy #{lit}")
+        else:
+            self.output.append(f"\tlda #{lit}")
+            self.output.append(f"\tsta {dest}")
+
+    def _gen_assign(self, dest, dest_sym, src, src_sym):
+        if dest_sym['type'] == 'reg':
+            if dest == 'a':
+                if src_sym['type'] == 'reg':
+                    if src == 'x':
+                        self.output.append("\ttxa")
+                    elif src == 'y':
+                        self.output.append("\ttya")
+                else:
+                    self.output.append(f"\tlda {src}")
+            elif dest == 'x':
+                if src_sym['type'] == 'reg':
+                    if src == 'a':
+                        self.output.append("\ttax")
+                    elif src == 'y':
+                        self.output.append("\ttya")
+                        self.output.append("\ttax")
+                else:
+                    self.output.append(f"\tldx {src}")
+            elif dest == 'y':
+                if src_sym['type'] == 'reg':
+                    if src == 'a':
+                        self.output.append("\ttay")
+                    elif src == 'x':
+                        self.output.append("\ttxa")
+                        self.output.append("\ttay")
+                else:
+                    self.output.append(f"\tldy {src}")
+        
+        elif dest_sym['type'] == 'var':
+            if src_sym['type'] == 'reg':
+                if src == 'a':
+                    self.output.append(f"\tsta {dest}")
+                elif src == 'x':
+                    self.output.append(f"\tstx {dest}")
+                elif src == 'y':
+                    self.output.append(f"\tsty {dest}")
+            else:
+                self.output.append(f"\tlda {src}")
+                self.output.append(f"\tsta {dest}")
+
+    def translate(self, filename, outfile):
+        self.if_stack = []
+        self.while_stack = []
+        
+        # Pass 1: declarations
+        for line_num, tokens, raw, cols in self.read_lines(filename):
+            self.current_raw = raw
+            if tokens[0] in ('var', 'const'):
+                self.process_declaration(line_num, tokens, cols)
+            elif tokens[0] == 'org':
+                if len(tokens) != 2:
+                    self._error(line_num, 0, "Expected 'org <address>'")
+                elif self.org is not None:
+                    self._error(line_num, cols[0], "'org' already specified")
+                else:
+                    self.org = tokens[1]
+            elif tokens[0] == 'axyvar':
+                if len(tokens) != 2:
+                    self._error(line_num, 0, "Expected 'axyvar <address>'")
+                    continue
+                addr = self.resolve_address(tokens[1])
+                if addr is None:
+                    self._error(line_num, cols[1], f"Invalid address '{tokens[1]}'")
+                    continue
+                self.next_var = addr
+            elif (len(tokens) == 3 and tokens[1] == '='
+                    and not tokens[0].startswith('.')
+                    and tokens[0].lower() not in self.symbols
+                    and tokens[0].lower() not in KEYWORDS):
+                if self._define_const(tokens[0], tokens[2], line_num, cols[0]):
+                    self.const_def_lines.add(line_num)
+        
+        if self.errors:
+            return False
+        
+        # Pass 2: statements (stream output as each line generates code)
+        target = open(outfile, 'w') if outfile else sys.stdout
+        try:
+            target.write(f"; Generated by AXY Compiler {timestamp()}\n")
+            for name, sym in self.symbols.items():
+                if sym['type'] == 'var':
+                    target.write(f"{name} = &{sym['addr']:02X}\n")
+                elif sym['type'] == 'const':
+                    target.write(f"{name} = {sym['lit']}\n")
+            if self.org:
+                target.write(f"\n\torg {self.org}\n")
+            
+            target.write("\n")
+            
+            for line_num, tokens, raw, cols in self.read_lines(filename):
+                self.current_raw = raw
+                if tokens[0] not in ('var', 'const', 'org', 'axyvar'):
+                    if line_num in self.const_def_lines:
+                        continue
+                    self.process_statement(line_num, tokens, cols)
+                    if self.errors:
+                        return False
+                    for line in self.output:
+                        target.write(f"{line}\n")
+                    self.output.clear()
+            
+            if self.if_stack:
+                self._error(None, 0, "Missing 'endif'")
+                return False
+            
+            if self.while_stack:
+                self._error(None, 0, "Missing 'endwhile'")
+                return False
+            
+        finally:
+            if outfile:
+                target.close()
+        
+        return True
+
+    def report(self, stream=sys.stdout):
+        addrs = [sym['addr'] for sym in self.symbols.values() if sym['type'] == 'var']
+        if addrs:
+            lo, hi = min(addrs), max(addrs)
+            if lo == hi:
+                print(f"  Variables: ${lo:02X} (1 var)", file=stream)
+            else:
+                print(f"  Variables: ${lo:02X} - ${hi:02X} ({len(addrs)} vars)", file=stream)
+        else:
+            print("  Variables: none", file=stream)
+        for name, sym in self.symbols.items():
+            if sym['type'] == 'var':
+                print(f"    {name} = ${sym['addr']:02X} (var)", file=stream)
+            elif sym['type'] == 'const':
+                print(f"    {name} = {sym['lit']} (const)", file=stream)
+            else:
+                print(f"    {name} = register", file=stream)
+
+    def format_error(self, line_num, col, msg, raw):
+        parts = []
+        if raw is not None:
+            parts.append(f"  {raw}")
+            parts.append(f"  {' ' * col}^")
+        parts.append(f"  Line {line_num}: {msg}")
+        return "\n".join(parts)
+
+def main():
+    args = [arg for arg in sys.argv[1:] if arg != '-v']
+    verbose = len(args) != len(sys.argv) - 1
+    if not args:
+        print("AXY Compiler")
+        print("Usage: ./axy.py [-v] input.axy [output.asm]")
+        print("If no output file is given, the generated assembly is written to stdout.")
+        print()
+        print("  -v                  - Print the symbol report after compiling")
+        print()
+        print("Features: (see README.md for complete details)")
+        print("  org <address>       - Set program start address")
+        print("  axyvar <address>    - Set variable allocation start address")
+        print("  var name            - Declare variable")
+        print("  const name = value  - Declare compile-time constant")
+        print("  name = value        - Assignment; a new name declares a constant")
+        print("  name += 1           - Increment")
+        print("  name -= 1           - Decrement")
+        print("  .name               - Define label")
+        print("  jmp label           - Unconditional jump")
+        print("  jsr label           - Jump to subroutine")
+        print("  rts                 - Return from subroutine")
+        print("  if reg == value     - Conditional branch")
+        print("  endif               - End of if block")
+        print("  while reg != value  - While loop")
+        print("  endwhile            - End of while loop")
+        sys.exit(1)
+    
+    infile = args[0]
+    outfile = args[1] if len(args) > 1 else None
+    
+    if outfile is not None and os.path.realpath(infile) == os.path.realpath(outfile):
+        print(f"✗ Input and output are the same file: {infile}")
+        sys.exit(1)
+    
+    compiler = AXYCompiler()
+    try:
+        with open('.axyvar', 'r') as f:
+            compiler.next_var = parse_number(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        pass
+
+    if compiler.translate(infile, outfile):
+        if compiler.next_var is not None:
+            with open('.axyvar', 'w') as f:
+                f.write(f"&{compiler.next_var:X}\n")
+        if verbose:
+            if outfile is None:
+                compiler.report(sys.stderr)
+            else:
+                compiler.report()
+    else:
+        stream = sys.stderr if outfile is None else sys.stdout
+        for line_num, col, msg, raw in compiler.errors:
+            if line_num is None:
+                print(f"  {msg}", file=stream)
+            else:
+                print(compiler.format_error(line_num, col, msg, raw), file=stream)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
