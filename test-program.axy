@@ -6,10 +6,11 @@
 ; ============================================
 
 	start_addr = &1900
-	variables = &100
-	org_addr = start_addr
+	alt_start_addr = &1a00
 
-	org org_addr			; emitted as 'org org_addr'; BeebAsm resolves the chain
+	variables = &100
+
+	org start_addr
 
 ; ============================================
 ; Variable declarations
@@ -49,9 +50,15 @@
 	counter = target		; LDA #target / STA counter
 	temp = max_value		; LDA #max_value / STA temp
 
+	jmp test2
+
 ; ============================================
 ; Test 2: Constants referenced by name
 ; ============================================
+
+	org alt_start_addr
+	
+.test2
 
 	a = maximum			; chain by name -> LDA #maximum
 	x = space			; character    -> LDX #space

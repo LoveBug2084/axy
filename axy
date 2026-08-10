@@ -520,8 +520,6 @@ class AXYCompiler:
             elif tokens[0] == 'org':
                 if len(tokens) != 2:
                     self._error(line_num, 0, "Expected 'org <address>'")
-                elif self.org is not None:
-                    self._error(line_num, cols[0], "'org' already specified")
                 else:
                     self.org = tokens[1]
             elif tokens[0] == 'axyvar':
