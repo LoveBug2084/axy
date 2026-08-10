@@ -1,3 +1,6 @@
+**Please be aware this project is under construction and this is a very early draft**
+
+
 # AXY Language Specification
 
 AXY is a small medium-level language that compiles to BeebAsm 6502 assembly.
