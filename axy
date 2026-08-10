@@ -309,7 +309,7 @@ class AXYCompiler:
             return
         
         start_label = self.new_label("repeat")
-        end_label = self.new_label("enduntil")
+        end_label = self.new_label("until")
         
         self.output.append("{")
         self.output.append(f"{start_label}")
