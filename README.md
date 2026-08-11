@@ -8,7 +8,7 @@ The name comes from the 6502 registers A, X and Y.
 ## Usage
 
 ```
-./axy [-v] input.axy [output.asm]
+./axy [-v] [-init] input.axy [output.asm]
 ```
 
 - `input.axy` is the source file.
@@ -16,25 +16,40 @@ The name comes from the 6502 registers A, X and Y.
   that file. If omitted, it is written to stdout (the symbol report goes to
   stderr, keeping stdout a pure assembly stream).
 - `-v` (anywhere in the command line) prints the symbol report after compiling:
-  the allocated variable addresses and every declared constant. Without it
-  the compiler is silent on success.
+  the current file's own variables (with their addresses), constants, and
+  labels. Imported symbols are omitted. Without it the compiler is silent on
+  success.
+- `-init` (anywhere in the command line) removes the `.axysymbols` state file
+  before compiling, so a build chain starts from a clean symbol table. Used
+  alone (`axy -init`) it only clears the file and exits, printing nothing;
+  `axy -init -v` clears the file and then shows the symbol report. Start a fresh
+  build with `axy -init -v library.axy`.
 - The compiler refuses to run if the input and output are the same file.
 
 All keywords are case-insensitive.
 
-### `.axyvar` — variable base across files
+### `.axysymbols` — symbols across files
 
-When the compiler starts it looks for a file named `.axyvar` in the current
-directory. If present and readable as a number, its value initialises the
-variable address counter, so a source that declares `var` without an
-`axyvar` of its own continues from where the previous file ended. After a
-successful compile the current counter value is written back to `.axyvar`.
+After a successful compile the compiler writes `.axysymbols` to the current
+directory: every variable (with its allocated address), constant, and user
+label. On the next run it reads that file back, so symbols declared in one
+`.axy` source are known to compiles of the other files in the same directory:
+a variable can be assigned, compared, and incremented from another file, and a
+constant or label referenced by name.
+
+Imported symbols are referenced but never re-emitted: the file that declares
+them owns the BeebAsm definition, so files are intended to be assembled
+together by BeebAsm. Declare each symbol once across the project — a later
+file that redeclares a conflicting definition reports an error, while
+redeclaring the identical definition is allowed (so recompiling the same file
+is harmless). Variables declared without an `axyvar` continue after the
+highest address imported from `.axysymbols`.
 
 There is no default variable base: declaring a `var` when no base has been
-set — no `axyvar` in the source and no usable `.axyvar` file — reports an
-error. An explicit `axyvar <address>` in the source always overrides the
-`.axyvar` value and re-anchors the chain. `.axyvar` is not committed to
-version control.
+set — no `axyvar` in the source and no imported variables — reports an error.
+An explicit `axyvar <address>` in the source always overrides the imported
+base and re-anchors the chain. `.axysymbols` is not committed to version
+control; delete it (or run `axy -init`) to reset the project's symbols.
 
 ## Generated output
 
@@ -132,7 +147,7 @@ axyvar <address>
 Sets the address of the next variable declared with `var`. It can appear
 anywhere in the file, at any time: variables declared before it keep their
 addresses, and variables declared after it continue from the new base. If no
-`axyvar` is given, the `.axyvar` file (see Usage) sets the base; with neither,
+`axyvar` is given, the `.axysymbols` file (see Usage) sets the base; with neither,
 declaring a `var` is an error.
 
 `<address>` may be a number in any supported base (decimal, `&` hex, or `%`
@@ -158,7 +173,7 @@ var name
 ```
 
 Declares a variable. Variables are allocated sequentially, starting at the
-address set by the `axyvar` directive or the `.axyvar` file (see Usage);
+address set by the `axyvar` directive or the `.axysymbols` file (see Usage);
 there is no default base, so declaring a `var` before either has set one is
 an error. The registers `a`, `x`, `y` cannot be used as variable
 names, and a name can only be declared once.
@@ -405,11 +420,32 @@ count = 0
 | `org` / `axyvar`     | implemented |
 | `asm` / `endasm`     | implemented |
 | comments             | implemented |
-| `.axyvar` state file | implemented |
+| `.axysymbols` symbol file | implemented |
 
 ---
 
 # Change Log
+
+## 2026-08-11 — `.axysymbols` state file
+
+- The old `.axyvar` file (a single number) is replaced by `.axysymbols`, which
+  stores the full symbol table: every variable with its allocated address,
+  every constant, and every user label. A successful compile writes the file;
+  the next compile in the same directory reads it back, so a variable can be
+  assigned, compared and incremented from another `.axy` file, and constants
+  or labels referenced by name.
+- Symbols are shared but only defined once: an imported symbol is referenced
+  without being re-emitted, so the `.axy` files are intended to be assembled
+  together by BeebAsm. Redeclaring an imported symbol with the *same*
+  definition is allowed (recompiling a file is harmless); a conflicting
+  redeclaration reports an error.
+- New `-init` flag removes `.axysymbols` so a build starts from a clean symbol
+  table. Used alone it is silent; `-init -v` removes the file then prints the
+  standard symbol report.
+- The `-v` symbol report now lists only the current file's own symbols and
+  adds a `Labels` section.
+- Variables declared without an `axyvar` continue after the highest address
+  imported from `.axysymbols`.
 
 ## 2026-08-11 — case-insensitive `endasm`; two-pass refactor
 
