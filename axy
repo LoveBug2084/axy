@@ -18,8 +18,8 @@ def parse_number(text):
         return int(text[1:], 2)
     return int(text, 10)
 
-KEYWORDS = ('var', 'org', 'axyvar', 'if', 'endif', 'while',
-            'endwhile', 'repeat', 'until', 'jmp', 'jsr', 'rts', 'goto',
+KEYWORDS = ('axyvar', 'var', 'org', 'if', 'endif', 'while',
+            'endwhile', 'repeat', 'until', 'jmp', 'jsr', 'rts',
             'asm', 'endasm')
 
 class AXYCompiler:

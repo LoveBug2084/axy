@@ -381,6 +381,7 @@ count = 0
 | Feature              | Status      |
 | -------------------- | ----------- |
 | `var`                | implemented |
+| constants            | implemented |
 | assignment           | implemented |
 | `+= 1` / `-= 1`      | implemented |
 | labels (`.name`)     | implemented |
@@ -388,6 +389,11 @@ count = 0
 | `jsr` / `rts`        | implemented |
 | `if ... endif`       | implemented |
 | `while ... endwhile` | implemented |
+| `repeat ... until`   | implemented |
+| `org` / `axyvar`     | implemented |
+| `asm` / `endasm`     | implemented |
+| comments             | implemented |
+| `.axyvar` state file | implemented |
 
 ---
 
