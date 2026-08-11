@@ -1,7 +1,17 @@
-Group the `-v` symbol report by type, then file, then name
+Add an `include` directive for multi-file sources
 
-`axy -v` (with no source file) now lists the `.axysymbols` table grouped by type, then by the file that declared each symbol, then by name. Each file's entries sit under a `file.axy:` heading (e.g. `lib.axy:`) with the symbols indented beneath, instead of every line carrying a `file:` prefix — so symbols from different files are no longer interleaved.
+`include lib.axy` splices another source file into the current compile: its declarations join the shared symbol table and its code is emitted inline in the generated `.asm`, exactly as if written at the `include` line. File names are relative to the working directory.
 
-The report shown after compiling a file now uses the same styling: the file's own variables, constants and labels are grouped under a `file.axy:` heading and sorted by name.
+Included symbols take the included file's name as their origin in `.axysymbols` and in the `-v` report, so a variable allocated by `lib.axy` is listed under a `lib.axy:` heading. Everything is allowed inside an included file — `var`, constants, `org`, `axyvar`, labels, loops, asm blocks, and nested `include`s.
+
+Guards and limits:
+
+- Including the same file twice is silently ignored after the first include.
+- An `include` inside an `asm` block is passed through verbatim and not expanded.
+- Circular includes, missing files, malformed directives, and depth over 50 are errors.
+- The compiler now tracks which source file each line comes from, so equal line numbers across files cannot collide (symbol origins, constant-definition lines, and errors are all per-file).
+
+Error messages now show the owning file and spell the line number out:
+`file.axy: line N: message` instead of `Line N: message`.
 
 - README changelog updated.

@@ -382,15 +382,49 @@ asm block can be referenced from later AXY code by name, where it compiles to
 an immediate (`#name`). A variable defined inside an asm block is not
 knowable to AXY as a variable — AXY would treat its name as a constant.
 
+## Include
+
+```
+include lib.axy
+```
+
+`include` splices another `.axy` file into the current one: its declarations
+are compiled into the same symbol table and its code is emitted inline in the
+generated `.asm`, exactly as if the file's contents had been written at the
+`include` line.
+
+- File names are relative to the current working directory.
+- All statements are allowed inside an included file: `var`, constants,
+  `org`, `axyvar`, labels, jumps, loops, raw `asm` blocks, and further
+  `include` directives.
+- Symbols declared in an included file carry that file's name as their origin
+  in `.axysymbols` and in the `-v` report, so a variable allocated by `lib.axy`
+  is listed under a `lib.axy:` heading.
+- Line numbers in errors keep the file that owns them, so the same line number
+  in two files never collides.
+- Including the same file twice is harmless: after the first include, later
+  includes of that file are silently ignored.
+- An `include` line inside an `asm` block is not expanded — it is passed
+  through verbatim as raw assembler text.
+- Errors: `Expected 'include <file>'` for a malformed directive,
+  `Included file not found: 'X'` for a missing file, and
+  `Circular include of 'X'` if a file includes itself directly or indirectly.
+  Include depth is capped at 50.
+
+Don't include a file and also assemble the separate `.asm` it produces — the
+included file's labels and constants would then be emitted twice, and BeebAsm
+would reject the duplicate definitions.
+
 ## Errors
 
 Errors print the offending source line with a `^` marker under the position,
-followed by `Line N: message`:
+followed by `file.axy: line N: message` — the filename because a single compile
+can now cover more than one file:
 
 ```
 temp += 3
         ^
-Line 2: Only +=1 and -=1 supported
+program.axy: line 2: Only +=1 and -=1 supported
 ```
 
 ## Example
@@ -429,12 +463,33 @@ count = 0
 | `pha` / `pla`             | implemented |
 | `org` / `axyvar`          | implemented |
 | `asm` / `endasm`          | implemented |
+| `include`                 | implemented |
 | comments                  | implemented |
 | `.axysymbols` symbol file | implemented |
 
 ---
 
 # Change Log
+
+## 2026-08-11 — `include` directive
+
+- `include file.axy` splices another source file into the compile: its
+  declarations join the shared symbol table and its code is emitted inline in
+  the `.asm`. File names are relative to the working directory.
+- Included symbols take the included file's name as their origin in
+  `.axysymbols` and in the `-v` report.
+- Including the same file twice is silently ignored after the first include.
+  Circular includes, missing files, malformed directives and excessive depth
+  (over 50) are errors. An `include` inside an `asm` block is passed through
+  as raw text and not expanded.
+- The compiler now tracks which source file each line comes from: symbol
+  origins, `const_def_lines` and error messages are all per-file, so equal
+  line numbers across files cannot collide.
+- Error output now shows the source file: `file.axy: N: message` instead of
+  `Line N: message`.
+- Error output spells the line number out: `file.axy: line N: message`
+  (e.g. `program.axy: line 2: Only +=1 and -=1 supported`), so the number is
+  self-explanatory and cannot be mistaken for a colon.
 
 ## 2026-08-11 — `-v` symbol report grouped by file
 

@@ -21,7 +21,7 @@ def parse_number(text):
 KEYWORDS = ('axyvar', 'var', 'org',
             'if', 'endif', 'while', 'endwhile', 'repeat', 'until',
             'jmp', 'jsr', 'rts', 'pha', 'pla',
-            'asm', 'endasm')
+            'asm', 'endasm', 'include')
 
 SYMBOLS_FILE = '.axysymbols'
 
@@ -32,6 +32,7 @@ class AXYCompiler:
         self.output = []
         self.errors = []
         self.current_raw = None
+        self.current_source = None
         self.label_counter = 0
         self.const_def_lines = set()
         
@@ -90,22 +91,60 @@ class AXYCompiler:
             cols.append(start_col)
         return tokens, cols
 
-    def read_lines(self, filename):
+    def _iter_lines(self, filename, depth=0, stack=None, seen=None):
+        # Generator over the effective source stream: the root file with
+        # included files spliced in-place. Yields
+        # (line_num, tokens, cols, raw, source) for every line.
+        if stack is None:
+            stack = []
+        if seen is None:
+            seen = set()
+        source = os.path.basename(filename)
+        if source in stack:
+            self._error(None, 0, f"Circular include of '{source}'")
+            return
+        if source in seen:
+            return
+        seen.add(source)
+        if depth > 50:
+            self._error(None, 0, f"Include depth exceeded (50) at '{source}'")
+            return
         try:
-            with open(filename, 'r') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line or line.startswith(';'):
-                        continue
-                    tokens, cols = self.tokenize(line)
-                    if not tokens:
-                        continue
-                    yield line_num, tokens, line, cols
+            f = open(filename, 'r')
         except FileNotFoundError:
-            self.errors.append((None, 0, f"File not found: {filename}", None))
+            if depth == 0:
+                self._error(None, 0, f"File not found: {filename}")
+            else:
+                self._error(None, 0, f"Included file not found: '{filename}'")
+            return
+        with f:
+            in_asm = False
+            for line_num, raw in enumerate(f, 1):
+                stripped = raw.strip()
+                tokens, cols = self.tokenize(stripped)
+                if in_asm:
+                    if tokens and tokens[0].lower() == 'endasm':
+                        in_asm = False
+                    yield line_num, tokens, cols, raw, source
+                    continue
+                if tokens and tokens[0].lower() == 'asm':
+                    in_asm = True
+                    yield line_num, tokens, cols, raw, source
+                    continue
+                if tokens and tokens[0].lower() == 'include':
+                    self.current_source = source
+                    self.current_raw = stripped
+                    if len(tokens) != 2:
+                        self._error(line_num, 0, "Expected 'include <file>'")
+                        continue
+                    yield from self._iter_lines(tokens[1], depth + 1,
+                                                stack + [source], seen)
+                    continue
+                yield line_num, tokens, cols, raw, source
 
     def _error(self, line_num, col, msg):
-        self.errors.append((line_num, col, msg, self.current_raw))
+        self.errors.append((self.current_source, line_num, col, msg,
+                            self.current_raw))
 
     def _origin_suffix(self, sym):
         origin = sym.get('origin')
@@ -212,7 +251,7 @@ class AXYCompiler:
                 if not existing.get('imported'):
                     self._error(line_num, cols[1], f"'{name}' already defined{self._origin_suffix(existing)}")
                     return
-                if existing.get('origin') and existing['origin'] != self.source_file:
+                if existing.get('origin') and existing['origin'] != self.current_source:
                     self._error(line_num, cols[1], f"'{name}' already defined{self._origin_suffix(existing)}")
                     return
                 if existing['type'] != 'var':
@@ -225,7 +264,7 @@ class AXYCompiler:
                     return
                 addr = self.next_var
                 self.next_var += 1
-            self.symbols[name] = {'type': 'var', 'addr': addr, 'origin': self.source_file}
+            self.symbols[name] = {'type': 'var', 'addr': addr, 'origin': self.current_source}
             return
 
     def _define_const(self, name, lit, line_num, col):
@@ -238,7 +277,7 @@ class AXYCompiler:
             if not existing.get('imported'):
                 self._error(line_num, col, f"'{name}' already defined{self._origin_suffix(existing)}")
                 return False
-            if existing.get('origin') and existing['origin'] != self.source_file:
+            if existing.get('origin') and existing['origin'] != self.current_source:
                 self._error(line_num, col, f"'{name}' already defined{self._origin_suffix(existing)}")
                 return False
             if existing['type'] != 'const':
@@ -247,7 +286,7 @@ class AXYCompiler:
             if existing['lit'] != lit:
                 self._error(line_num, col, f"'{name}' already defined as '{existing['lit']}'{self._origin_suffix(existing)}")
                 return False
-        self.symbols[name] = {'type': 'const', 'lit': lit, 'origin': self.source_file}
+        self.symbols[name] = {'type': 'const', 'lit': lit, 'origin': self.current_source}
         return True
 
     def process_statement(self, line_num, tokens, cols):
@@ -261,13 +300,13 @@ class AXYCompiler:
                 if not existing.get('imported'):
                     self._error(line_num, cols[0], f"Label '{tokens[0]}' already defined{self._origin_suffix(existing)}")
                     return
-                if existing.get('origin') and existing['origin'] != self.source_file:
+                if existing.get('origin') and existing['origin'] != self.current_source:
                     self._error(line_num, cols[0], f"Label '{tokens[0]}' already defined{self._origin_suffix(existing)}")
                     return
                 if existing['type'] != 'label':
                     self._error(line_num, cols[0], f"'{tokens[0]}' already defined as a {existing['type']}{self._origin_suffix(existing)}")
                     return
-            self.symbols[tokens[0]] = {'type': 'label', 'origin': self.source_file}
+            self.symbols[tokens[0]] = {'type': 'label', 'origin': self.current_source}
             return
         
         # jmp
@@ -623,8 +662,11 @@ class AXYCompiler:
     def _pass1(self, filename):
         # Declaration pass: build the symbol table, emit nothing.
         in_asm = False
-        for line_num, tokens, raw, cols in self.read_lines(filename):
-            self.current_raw = raw
+        for line_num, tokens, cols, raw, source in self._iter_lines(filename):
+            self.current_source = source
+            self.current_raw = raw.strip()
+            if not tokens:
+                continue
             tokenLower = tokens[0].lower()
 
             if tokenLower == 'asm':
@@ -656,7 +698,7 @@ class AXYCompiler:
                 if (existing is None
                         or (existing.get('imported') and existing['type'] == 'const')):
                     if self._define_const(tokens[0], tokens[2], line_num, cols[0]):
-                        self.const_def_lines.add(line_num)
+                        self.const_def_lines.add((source, line_num))
         return not self.errors
 
     def _pass2(self, filename, target):
@@ -665,69 +707,64 @@ class AXYCompiler:
         target.write("\n")
 
         in_asm = False
-        with open(filename, 'r') as f:
-            for line_num, raw_line in enumerate(f, 1):
-                if in_asm:
-                    stripped = raw_line.strip()
-                    tokens, cols = self.tokenize(stripped)
-                    if tokens and tokens[0].lower() == 'endasm':
-                        in_asm = False
-                        continue
-                    target.write(raw_line)
+        for line_num, tokens, cols, raw_line, source in self._iter_lines(filename):
+            self.current_source = source
+            self.current_raw = raw_line.strip()
+            if in_asm:
+                if tokens and tokens[0].lower() == 'endasm':
+                    in_asm = False
                     continue
+                target.write(raw_line)
+                continue
 
-                stripped = raw_line.strip()
-                leading_ws = raw_line[:len(raw_line) - len(raw_line.lstrip())]
-                if not stripped:
-                    target.write(raw_line)
-                    continue
-                if stripped.startswith(';'):
-                    target.write(raw_line)
-                    continue
-                self.current_raw = stripped
-                comment = ''
-                semi = stripped.find(';')
-                if semi != -1:
-                    comment = stripped[semi:]
-                    stripped = stripped[:semi].rstrip()
-                tokens, cols = self.tokenize(stripped)
-                if not tokens:
-                    continue
-                tokenLower = tokens[0].lower()
-                if tokenLower == 'asm':
-                    if len(tokens) != 1:
-                        self._error(line_num, 0, "'asm' takes no arguments")
-                        return False
-                    in_asm = True
-                    continue
-                if tokenLower == 'endasm':
-                    self._error(line_num, 0, "'endasm' without matching 'asm'")
+            leading_ws = raw_line[:len(raw_line) - len(raw_line.lstrip())]
+            if not tokens:
+                target.write(raw_line)
+                continue
+            stripped = raw_line.strip()
+            if stripped.startswith(';'):
+                target.write(raw_line)
+                continue
+            comment = ''
+            semi = stripped.find(';')
+            if semi != -1:
+                comment = stripped[semi:]
+                stripped = stripped[:semi].rstrip()
+            tokenLower = tokens[0].lower()
+            if tokenLower == 'asm':
+                if len(tokens) != 1:
+                    self._error(line_num, 0, "'asm' takes no arguments")
                     return False
-                if tokenLower == 'var':
-                    sym = self.symbols[tokens[1]]
-                    target.write(f"{leading_ws}{tokens[1]} = &{sym['addr']:02X}{comment}\n")
-                    continue
-                if tokenLower == 'org':
-                    target.write(f"{leading_ws}{tokens[0]} {tokens[1]}{comment}\n")
-                    continue
-                if line_num in self.const_def_lines:
-                    target.write(f"{leading_ws}{tokens[0]} = {tokens[2]}{comment}\n")
-                    continue
-                if tokenLower not in ('var', 'org', 'axyvar'):
-                    self.process_statement(line_num, tokens, cols)
-                    if self.errors:
-                        return False
-                    if comment:
-                        for i, line in enumerate(self.output):
-                            s = line.strip()
-                            if s not in ('{', '}') and not s.startswith('.'):
-                                self.output[i] = f"{line}{comment}"
-                                break
-                        else:
-                            self.output[0] = f"{self.output[0]}{comment}"
-                    for line in self.output:
-                        target.write(f"{leading_ws}{line}\n")
-                    self.output.clear()
+                in_asm = True
+                continue
+            if tokenLower == 'endasm':
+                self._error(line_num, 0, "'endasm' without matching 'asm'")
+                return False
+            if tokenLower == 'var':
+                sym = self.symbols[tokens[1]]
+                target.write(f"{leading_ws}{tokens[1]} = &{sym['addr']:02X}{comment}\n")
+                continue
+            if tokenLower == 'org':
+                target.write(f"{leading_ws}{tokens[0]} {tokens[1]}{comment}\n")
+                continue
+            if (source, line_num) in self.const_def_lines:
+                target.write(f"{leading_ws}{tokens[0]} = {tokens[2]}{comment}\n")
+                continue
+            if tokenLower not in ('var', 'org', 'axyvar'):
+                self.process_statement(line_num, tokens, cols)
+                if self.errors:
+                    return False
+                if comment:
+                    for i, line in enumerate(self.output):
+                        s = line.strip()
+                        if s not in ('{', '}') and not s.startswith('.'):
+                            self.output[i] = f"{line}{comment}"
+                            break
+                    else:
+                        self.output[0] = f"{self.output[0]}{comment}"
+                for line in self.output:
+                    target.write(f"{leading_ws}{line}\n")
+                self.output.clear()
 
         if in_asm:
             self._error(None, 0, "Missing 'endasm'")
@@ -748,7 +785,6 @@ class AXYCompiler:
         return True
 
     def translate(self, filename, outfile):
-        self.source_file = os.path.basename(filename)
         self.if_stack = []
         self.while_stack = []
         self.repeat_stack = []
@@ -799,12 +835,15 @@ class AXYCompiler:
             if i < len(sections) - 1:
                 print(f"", file=stream)
 
-    def format_error(self, line_num, col, msg, raw):
+    def format_error(self, source, line_num, col, msg, raw):
         parts = []
         if raw is not None:
             parts.append(f"  {raw}")
             parts.append(f"  {' ' * col}^")
-        parts.append(f"  Line {line_num}: {msg}")
+        if line_num is not None:
+            parts.append(f"  {source}: line {line_num}: {msg}")
+        else:
+            parts.append(f"  {msg}")
         return "\n".join(parts)
 
 def main():
@@ -865,6 +904,7 @@ def main():
         print("  until reg == value  - Loop back while false, exit when true")
         print("  asm                 - Raw assembler passthrough")
         print("  endasm              - Back to AXY mode")
+        print("  include <file>      - Include another .axy file")
         sys.exit(1)
     
     infile = args[0]
@@ -886,11 +926,11 @@ def main():
                 compiler.report()
     else:
         stream = sys.stderr if outfile is None else sys.stdout
-        for line_num, col, msg, raw in compiler.errors:
+        for source, line_num, col, msg, raw in compiler.errors:
             if line_num is None:
                 print(f"  {msg}", file=stream)
             else:
-                print(compiler.format_error(line_num, col, msg, raw), file=stream)
+                print(compiler.format_error(source, line_num, col, msg, raw), file=stream)
         sys.exit(1)
 
 if __name__ == "__main__":
