@@ -71,9 +71,7 @@ Output is written as compilation progresses:
 
 ## Comments
 
-Any text after `;` on a line are comments. Full-line
-comments are copied straight through to the generated output. A comment after AXY
-code is attached to the first assembler instruction that statement generates.
+Anything after a `;` is a comment. Full-line comments are copied straight through to the generated output. A comment after AXY code is attached to the first assembler instruction that statement generates.
 
 ```
 ; this is a comment          -> ; this is a comment
