@@ -213,6 +213,17 @@ Only `+= 1` and `-= 1` are supported. For `x`/`y` this compiles to
 `inx`/`dex`/`iny`/`dey`; for variables it compiles to `inc name`/`dec name`.
 `a` is not supported.
 
+## Stack (`pha` / `pla`)
+
+```
+pha
+pla
+```
+
+`pha` pushes the accumulator onto the hardware stack; `pla` pulls the top of
+the stack into the accumulator. Neither takes arguments. They are reserved
+keywords, so they cannot be used as variable or constant names.
+
 ## Labels and jumps
 
 A label is defined by a line consisting of a dot followed by the label name.
@@ -390,6 +401,7 @@ count = 0
 | `if ... endif`       | implemented |
 | `while ... endwhile` | implemented |
 | `repeat ... until`   | implemented |
+| `pha` / `pla`        | implemented |
 | `org` / `axyvar`     | implemented |
 | `asm` / `endasm`     | implemented |
 | comments             | implemented |
