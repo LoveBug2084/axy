@@ -15,10 +15,12 @@ The name comes from the 6502 registers A, X and Y.
 - `output.asm` is optional. If given, the generated assembly is written to
   that file. If omitted, it is written to stdout (the symbol report goes to
   stderr, keeping stdout a pure assembly stream).
-- `-v` (before the file names) prints the symbol report after compiling:
+- `-v` (anywhere in the command line) prints the symbol report after compiling:
   the allocated variable addresses and every declared constant. Without it
   the compiler is silent on success.
 - The compiler refuses to run if the input and output are the same file.
+
+All keywords are case-insensitive.
 
 ### `.axyvar` — variable base across files
 
@@ -69,7 +71,7 @@ Output is written as compilation progresses:
 
 ## Comments
 
-Lines beginning with `;` and any text after `;` on a line are comments. Full-line
+Any text after `;` on a line are comments. Full-line
 comments are copied straight through to the generated output. A comment after AXY
 code is attached to the first assembler instruction that statement generates.
 
@@ -410,6 +412,15 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-11 — case-insensitive `endasm`; two-pass refactor
+
+- `endasm` is now recognised case-insensitively (like every other keyword) and
+  may carry a trailing comment, so `ENDASM ; done` inside an `asm` block ends
+  it. Previously the block-exit check was case-sensitive and required the line
+  to be exactly `endasm`.
+- Internal: `translate()` split into `_pass1` (declaration pass) and `_pass2`
+  (statement pass), which now share the token-based asm/`endasm` handling.
 
 ## 2026-08-10 — repeat / until loop
 
