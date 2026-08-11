@@ -18,8 +18,9 @@ def parse_number(text):
         return int(text[1:], 2)
     return int(text, 10)
 
-KEYWORDS = ('axyvar', 'var', 'org', 'if', 'endif', 'while',
-            'endwhile', 'repeat', 'until', 'jmp', 'jsr', 'rts',
+KEYWORDS = ('axyvar', 'var', 'org',
+            'if', 'endif', 'while', 'endwhile', 'repeat', 'until',
+            'jmp', 'jsr', 'rts', 'pha', 'pla',
             'asm', 'endasm')
 
 class AXYCompiler:
@@ -164,7 +165,7 @@ class AXYCompiler:
             self.output.append(tokens[0])
             return
         
-        # Jmp
+        # jmp
         if tokenLower == 'jmp':
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jmp label' expected")
@@ -172,7 +173,7 @@ class AXYCompiler:
             self.output.append(f"jmp {tokens[1]}")
             return
         
-        # Jsr
+        # jsr
         if tokenLower == 'jsr':
             if len(tokens) != 2:
                 self._error(line_num, 0, "'jsr label' expected")
@@ -180,7 +181,7 @@ class AXYCompiler:
             self.output.append(f"jsr {tokens[1]}")
             return
         
-        # Rts
+        # rts
         if tokenLower == 'rts':
             if len(tokens) != 1:
                 self._error(line_num, 0, "'rts' takes no arguments")
@@ -188,47 +189,45 @@ class AXYCompiler:
             self.output.append("rts")
             return
         
-        # If statement
+        # pha
+        if tokenLower == 'pha':
+            if len(tokens) != 1:
+                self._error(line_num, 0, "'pha' takes no arguments")
+                return
+            self.output.append("pha")
+            return
+        
+        # pla
+        if tokenLower == 'pla':
+            if len(tokens) != 1:
+                self._error(line_num, 0, "'pla' takes no arguments")
+                return
+            self.output.append("pla")
+            return
+        
+        # if statement
         if tokenLower == 'if':
             return self.process_if(line_num, tokens, cols)
         
-        # While
+        # endif
+        if tokenLower == 'endif':
+            return self.process_endif(line_num, tokens, cols)
+        
+        # while
         if tokenLower == 'while':
             return self.process_while(line_num, tokens, cols)
         
-        # Repeat
+        # endwhile
+        if tokenLower == 'endwhile':
+            return self.process_endwhile(line_num, tokens, cols)
+        
+        # repeat
         if tokenLower == 'repeat':
             return self.process_repeat(line_num, tokens, cols)
         
-        # Until
+        # until
         if tokenLower == 'until':
             return self.process_until(line_num, tokens, cols)
-        
-        # Endif
-        if tokenLower == 'endif':
-            if len(tokens) != 1:
-                self._error(line_num, 0, "'endif' takes no arguments")
-                return
-            if not self.if_stack:
-                self._error(line_num, 0, "'endif' without matching 'if'")
-                return
-            self.output.append(self.if_stack.pop())
-            self.output.append("}")
-            return
-        
-        # Endwhile
-        if tokenLower == 'endwhile':
-            if len(tokens) != 1:
-                self._error(line_num, 0, "'endwhile' takes no arguments")
-                return
-            if not self.while_stack:
-                self._error(line_num, 0, "'endwhile' without matching 'while'")
-                return
-            start_label, end_label = self.while_stack.pop()
-            self.output.append(f"jmp {start_label[1:]}")
-            self.output.append(end_label)
-            self.output.append("}")
-            return
         
         # name += 1 or name -= 1
         if len(tokens) == 3 and tokens[1] in ('+=', '-='):
@@ -269,6 +268,16 @@ class AXYCompiler:
         
         self.if_stack.append(end_label)
 
+    def process_endif(self, line_num, tokens, cols):
+        if len(tokens) != 1:
+            self._error(line_num, 0, "'endif' takes no arguments")
+            return
+        if not self.if_stack:
+            self._error(line_num, 0, "'endif' without matching 'if'")
+            return
+        self.output.append(self.if_stack.pop())
+        self.output.append("}")
+
     def process_while(self, line_num, tokens, cols):
         if len(tokens) != 4:
             self._error(line_num, 0, "Expected 'while reg op value'")
@@ -295,6 +304,18 @@ class AXYCompiler:
             return
         
         self.while_stack.append((start_label, end_label))
+
+    def process_endwhile(self, line_num, tokens, cols):
+        if len(tokens) != 1:
+            self._error(line_num, 0, "'endwhile' takes no arguments")
+            return
+        if not self.while_stack:
+            self._error(line_num, 0, "'endwhile' without matching 'while'")
+            return
+        start_label, end_label = self.while_stack.pop()
+        self.output.append(f"jmp {start_label[1:]}")
+        self.output.append(end_label)
+        self.output.append("}")
 
     def process_repeat(self, line_num, tokens, cols):
         if len(tokens) != 1:
@@ -640,13 +661,15 @@ class AXYCompiler:
                 print(f"  Variables: ${lo:02X} - ${hi:02X} ({len(addrs)} vars)", file=stream)
         else:
             print("  Variables: none", file=stream)
+
         for name, sym in self.symbols.items():
             if sym['type'] == 'var':
                 print(f"    {name} = ${sym['addr']:02X} (var)", file=stream)
-            elif sym['type'] == 'const':
+
+        print(f"  Constants:", file=stream)
+        for name, sym in self.symbols.items():
+            if sym['type'] == 'const':
                 print(f"    {name} = {sym['lit']} (const)", file=stream)
-            else:
-                print(f"    {name} = register", file=stream)
 
     def format_error(self, line_num, col, msg, raw):
         parts = []
