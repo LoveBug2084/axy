@@ -1,10 +1,11 @@
-Add .axysymbols shared symbol state and -init flag
+Track symbol origin, restrict redeclaration to the declaring file, and list the symbol table
 
-The old .axyvar file (a single number) is replaced by .axysymbols, which stores the complete symbol table after each successful compile: every variable with its allocated address, every constant, and every user label. The next compile in the same directory reads it back, so a variable can be assigned, compared and incremented from another .axy file, and constants or labels referenced by name. Variables declared without an axyvar now continue after the highest imported address.
+Each symbol in .axysymbols now records the source file that declared it, saved as a trailing comment (e.g. `var score = &70 ; lib.axy`). Duplicate-definition errors use it to report where the symbol was already defined: `'score' already defined at &70 (lib.axy)`.
 
-- New -init flag resets the state file. Used alone it is silent; `axy -init -v` clears the file then shows the symbol report. Usage is now `axy [-v] [-init] input.axy [output.asm]`.
-- Symbols are shared but defined only once — imported symbols are referenced, never re-emitted, so the .axy files are assembled together by BeebAsm.
-- Duplicate or conflicting declarations are rejected with errors (`'score' already defined at &70`, `'base' already defined as '&70'`, `Label '.dup' already defined`). Re-declaring an identical definition is allowed, so recompiling a file is harmless.
-- The -v symbol report now lists only the current file's own variables, constants and labels, and adds a Labels section.
-- Fix: recompiling a file that declares constants no longer fails with "constant cannot be reassigned".
-- README updated (usage, .axysymbols section, changelog).
+Redeclaration is now owner-scoped: a symbol may only be redeclared by the file named as its origin. Recompiling the file that declared it stays harmless, but any other file redeclaring the name — even with an identical definition — reports an error naming the owner. Previously an identical redefinition from another file was accepted silently.
+
+New: `axy -v` with no source file now lists the entire `.axysymbols` table instead of printing usage — variables, constants and labels, each entry naming the file that declared it. `axy -init -v` (clears then shows the report) and compiling with `-v` (current file's own symbols only) are unchanged.
+
+- Same-file duplicate declarations still error as before (`var`, `name = value`, and labels).
+- Old-format .axysymbols files without origin comments still load; the owner check applies once the file has been recompiled.
+- README updated (.axysymbols section and changelog).

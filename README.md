@@ -17,7 +17,9 @@ The name comes from the 6502 registers A, X and Y.
   stderr, keeping stdout a pure assembly stream).
 - `-v` (anywhere in the command line) prints the symbol report after compiling:
   the current file's own variables (with their addresses), constants, and
-  labels. Imported symbols are omitted. Without it the compiler is silent on
+  labels. Imported symbols are omitted. With no source file, `-v` lists the
+  entire `.axysymbols` table instead — variables, constants and labels, each
+  entry naming the file that declared it. Without it the compiler is silent on
   success.
 - `-init` (anywhere in the command line) removes the `.axysymbols` state file
   before compiling, so a build chain starts from a clean symbol table. Used
@@ -39,11 +41,14 @@ constant or label referenced by name.
 
 Imported symbols are referenced but never re-emitted: the file that declares
 them owns the BeebAsm definition, so files are intended to be assembled
-together by BeebAsm. Declare each symbol once across the project — a later
-file that redeclares a conflicting definition reports an error, while
-redeclaring the identical definition is allowed (so recompiling the same file
-is harmless). Variables declared without an `axyvar` continue after the
-highest address imported from `.axysymbols`.
+together by BeebAsm. Each symbol may only be redeclared by the file that
+originally declared it (its recorded origin) — recompiling that file is
+harmless, while any other file redeclaring the name reports an error, whether
+or not the definition matches. Each entry records the source file that
+declared it (e.g. `var score = &70 ; lib.axy`), and duplicate-definition
+errors report where the symbol was already defined:
+`'score' already defined at &70 (lib.axy)`. Variables declared without an
+`axyvar` continue after the highest address imported from `.axysymbols`.
 
 There is no default variable base: declaring a `var` when no base has been
 set — no `axyvar` in the source and no imported variables — reports an error.
@@ -436,16 +441,22 @@ count = 0
   or labels referenced by name.
 - Symbols are shared but only defined once: an imported symbol is referenced
   without being re-emitted, so the `.axy` files are intended to be assembled
-  together by BeebAsm. Redeclaring an imported symbol with the *same*
-  definition is allowed (recompiling a file is harmless); a conflicting
-  redeclaration reports an error.
+  together by BeebAsm. A symbol may only be redeclared by the file that
+  originally declared it — recompiling that file is harmless, while any other
+  file redeclaring the name reports an error, whether or not the definition
+  matches.
 - New `-init` flag removes `.axysymbols` so a build starts from a clean symbol
   table. Used alone it is silent; `-init -v` removes the file then prints the
   standard symbol report.
 - The `-v` symbol report now lists only the current file's own symbols and
-  adds a `Labels` section.
+  adds a `Labels` section. With no source file, `-v` lists the entire
+  `.axysymbols` table (variables, constants, labels), each entry naming the
+  file that declared it.
 - Variables declared without an `axyvar` continue after the highest address
   imported from `.axysymbols`.
+- Each `.axysymbols` entry records the source file that declared it, and
+  duplicate-definition errors name that file, e.g.
+  `'score' already defined at &70 (lib.axy)`.
 
 ## 2026-08-11 — case-insensitive `endasm`; two-pass refactor
 

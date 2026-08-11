@@ -107,6 +107,10 @@ class AXYCompiler:
     def _error(self, line_num, col, msg):
         self.errors.append((line_num, col, msg, self.current_raw))
 
+    def _origin_suffix(self, sym):
+        origin = sym.get('origin')
+        return f" ({origin})" if origin else ""
+
     def load_symbols(self):
         # Import the symbol table left by a previous compile, and continue the
         # variable counter after the highest address it used.
@@ -116,6 +120,13 @@ class AXYCompiler:
                     stripped = line.strip()
                     if not stripped or stripped.startswith(';'):
                         continue
+                    origin = None
+                    semi = stripped.find(';')
+                    if semi != -1:
+                        origin = stripped[semi + 1:].strip() or None
+                        stripped = stripped[:semi].strip()
+                        if not stripped:
+                            continue
                     tokens = stripped.split()
                     if len(tokens) < 2:
                         continue
@@ -126,12 +137,21 @@ class AXYCompiler:
                             addr = parse_number(tokens[3])
                         except ValueError:
                             continue
-                        self.symbols[name] = {'type': 'var', 'addr': addr, 'imported': True}
+                        sym = {'type': 'var', 'addr': addr, 'imported': True}
+                        if origin:
+                            sym['origin'] = origin
+                        self.symbols[name] = sym
                     elif kind == 'const' and len(tokens) >= 4 and tokens[2] == '=':
                         lit = stripped[stripped.index('=') + 1:].strip()
-                        self.symbols[name] = {'type': 'const', 'lit': lit, 'imported': True}
+                        sym = {'type': 'const', 'lit': lit, 'imported': True}
+                        if origin:
+                            sym['origin'] = origin
+                        self.symbols[name] = sym
                     elif kind == 'label':
-                        self.symbols[name] = {'type': 'label', 'imported': True}
+                        sym = {'type': 'label', 'imported': True}
+                        if origin:
+                            sym['origin'] = origin
+                        self.symbols[name] = sym
         except FileNotFoundError:
             pass
         var_addrs = [sym['addr'] for sym in self.symbols.values()
@@ -150,12 +170,13 @@ class AXYCompiler:
                                     key=lambda kv: (order.get(kv[1]['type'], 9), kv[0])):
                 if sym['type'] == 'reg':
                     continue
+                origin = f" ; {sym['origin']}" if sym.get('origin') else ""
                 if sym['type'] == 'var':
-                    f.write(f"var {name} = &{sym['addr']:02X}\n")
+                    f.write(f"var {name} = &{sym['addr']:02X}{origin}\n")
                 elif sym['type'] == 'const':
-                    f.write(f"const {name} = {sym['lit']}\n")
+                    f.write(f"const {name} = {sym['lit']}{origin}\n")
                 elif sym['type'] == 'label':
-                    f.write(f"label {name}\n")
+                    f.write(f"label {name}{origin}\n")
 
     def new_label(self, prefix="L"):
         self.label_counter += 1
@@ -194,15 +215,18 @@ class AXYCompiler:
             existing = self.symbols.get(name)
             if existing is not None:
                 if not existing.get('imported'):
-                    self._error(line_num, cols[1], f"'{name}' already defined")
+                    self._error(line_num, cols[1], f"'{name}' already defined{self._origin_suffix(existing)}")
+                    return
+                if existing.get('origin') and existing['origin'] != self.source_file:
+                    self._error(line_num, cols[1], f"'{name}' already defined{self._origin_suffix(existing)}")
                     return
                 if existing['type'] != 'var':
-                    self._error(line_num, cols[1], f"'{name}' already defined as a {existing['type']}")
+                    self._error(line_num, cols[1], f"'{name}' already defined as a {existing['type']}{self._origin_suffix(existing)}")
                     return
                 if existing['addr'] != addr:
-                    self._error(line_num, cols[1], f"'{name}' already defined at &{existing['addr']:02X}")
+                    self._error(line_num, cols[1], f"'{name}' already defined at &{existing['addr']:02X}{self._origin_suffix(existing)}")
                     return
-            self.symbols[name] = {'type': 'var', 'addr': addr}
+            self.symbols[name] = {'type': 'var', 'addr': addr, 'origin': self.source_file}
             return
 
     def _define_const(self, name, lit, line_num, col):
@@ -213,15 +237,18 @@ class AXYCompiler:
         existing = self.symbols.get(name)
         if existing is not None:
             if not existing.get('imported'):
-                self._error(line_num, col, f"'{name}' already defined")
+                self._error(line_num, col, f"'{name}' already defined{self._origin_suffix(existing)}")
+                return False
+            if existing.get('origin') and existing['origin'] != self.source_file:
+                self._error(line_num, col, f"'{name}' already defined{self._origin_suffix(existing)}")
                 return False
             if existing['type'] != 'const':
-                self._error(line_num, col, f"'{name}' already defined as a {existing['type']}")
+                self._error(line_num, col, f"'{name}' already defined as a {existing['type']}{self._origin_suffix(existing)}")
                 return False
             if existing['lit'] != lit:
-                self._error(line_num, col, f"'{name}' already defined as '{existing['lit']}'")
+                self._error(line_num, col, f"'{name}' already defined as '{existing['lit']}'{self._origin_suffix(existing)}")
                 return False
-        self.symbols[name] = {'type': 'const', 'lit': lit}
+        self.symbols[name] = {'type': 'const', 'lit': lit, 'origin': self.source_file}
         return True
 
     def process_statement(self, line_num, tokens, cols):
@@ -233,12 +260,15 @@ class AXYCompiler:
             existing = self.symbols.get(tokens[0])
             if existing is not None:
                 if not existing.get('imported'):
-                    self._error(line_num, cols[0], f"Label '{tokens[0]}' already defined")
+                    self._error(line_num, cols[0], f"Label '{tokens[0]}' already defined{self._origin_suffix(existing)}")
+                    return
+                if existing.get('origin') and existing['origin'] != self.source_file:
+                    self._error(line_num, cols[0], f"Label '{tokens[0]}' already defined{self._origin_suffix(existing)}")
                     return
                 if existing['type'] != 'label':
-                    self._error(line_num, cols[0], f"'{tokens[0]}' already defined as a {existing['type']}")
+                    self._error(line_num, cols[0], f"'{tokens[0]}' already defined as a {existing['type']}{self._origin_suffix(existing)}")
                     return
-            self.symbols[tokens[0]] = {'type': 'label'}
+            self.symbols[tokens[0]] = {'type': 'label', 'origin': self.source_file}
             return
         
         # jmp
@@ -719,6 +749,7 @@ class AXYCompiler:
         return True
 
     def translate(self, filename, outfile):
+        self.source_file = os.path.basename(filename)
         self.if_stack = []
         self.while_stack = []
         self.repeat_stack = []
@@ -733,26 +764,30 @@ class AXYCompiler:
             if outfile:
                 target.close()
 
-    def report(self, stream=sys.stdout):
-        local = {name: sym for name, sym in self.symbols.items()
-                 if not sym.get('imported')}
+    def report(self, stream=sys.stdout, include_imported=False):
+        if include_imported:
+            items = self.symbols
+        else:
+            items = {name: sym for name, sym in self.symbols.items()
+                     if not sym.get('imported')}
+        origin_suffix = self._origin_suffix if include_imported else (lambda sym: "")
 
         print(f"  Variables:", file=stream)
-        for name, sym in local.items():
+        for name, sym in items.items():
             if sym['type'] == 'var':
-                print(f"    {name} = ${sym['addr']:02X}", file=stream)
+                print(f"    {name} = ${sym['addr']:02X}{origin_suffix(sym)}", file=stream)
         print(f"", file=stream)
 
         print(f"  Constants:", file=stream)
-        for name, sym in local.items():
+        for name, sym in items.items():
             if sym['type'] == 'const':
-                print(f"    {name} = {sym['lit']}", file=stream)
+                print(f"    {name} = {sym['lit']}{origin_suffix(sym)}", file=stream)
         print(f"", file=stream)
 
         print(f"  Labels:", file=stream)
-        for name, sym in local.items():
+        for name, sym in items.items():
             if sym['type'] == 'label':
-                print(f"    {name}", file=stream)
+                print(f"    {name}{origin_suffix(sym)}", file=stream)
 
     def format_error(self, line_num, col, msg, raw):
         parts = []
@@ -781,11 +816,15 @@ def main():
             pass
 
     if not args:
-        if init:
-            if verbose:
-                compiler = AXYCompiler()
-                compiler.load_symbols()
+        if verbose:
+            compiler = AXYCompiler()
+            compiler.load_symbols()
+            if init:
                 compiler.report()
+            else:
+                compiler.report(include_imported=True)
+            return
+        if init:
             return
         print("axy compiler")
         print("usage: axy [-v] [-init] input.axy [output.asm]")
