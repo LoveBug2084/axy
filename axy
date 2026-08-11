@@ -111,10 +111,6 @@ class AXYCompiler:
         origin = sym.get('origin')
         return f" ({origin})" if origin else ""
 
-    def _origin_prefix(self, sym):
-        origin = sym.get('origin')
-        return f"{origin}: " if origin else ""
-
     def load_symbols(self):
         # Import the symbol table left by a previous compile, and continue the
         # variable counter after the highest address it used.
@@ -770,28 +766,38 @@ class AXYCompiler:
     def report(self, stream=sys.stdout, include_imported=False):
         if include_imported:
             items = self.symbols
-            prefix = self._origin_prefix
         else:
             items = {name: sym for name, sym in self.symbols.items()
                      if not sym.get('imported')}
-            prefix = (lambda sym: "")
+        by_origin = True
 
-        print(f"  Variables:", file=stream)
-        for name, sym in items.items():
-            if sym['type'] == 'var':
-                print(f"    {prefix(sym)}{name} = ${sym['addr']:02X}", file=stream)
-        print(f"", file=stream)
-
-        print(f"  Constants:", file=stream)
-        for name, sym in items.items():
-            if sym['type'] == 'const':
-                print(f"    {prefix(sym)}{name} = {sym['lit']}", file=stream)
-        print(f"", file=stream)
-
-        print(f"  Labels:", file=stream)
-        for name, sym in items.items():
-            if sym['type'] == 'label':
-                print(f"    {prefix(sym)}{name}", file=stream)
+        sections = (
+            ('var', 'Variables',
+             lambda name, sym: f"{name} = ${sym['addr']:02X}"),
+            ('const', 'Constants',
+             lambda name, sym: f"{name} = {sym['lit']}"),
+            ('label', 'Labels',
+             lambda name, sym: f"{name}"),
+        )
+        for i, (kind, header, fmt) in enumerate(sections):
+            print(f"  {header}:", file=stream)
+            entries = [(name, sym) for name, sym in items.items()
+                       if sym['type'] == kind]
+            if by_origin:
+                grouped = {}
+                for name, sym in entries:
+                    grouped.setdefault(sym.get('origin') or '',
+                                       []).append((name, sym))
+                for origin in sorted(grouped):
+                    print(f"    {origin}:", file=stream)
+                    for name, sym in sorted(grouped[origin],
+                                            key=lambda ns: ns[0]):
+                        print(f"      {fmt(name, sym)}", file=stream)
+            else:
+                for name, sym in sorted(entries, key=lambda ns: ns[0]):
+                    print(f"    {fmt(name, sym)}", file=stream)
+            if i < len(sections) - 1:
+                print(f"", file=stream)
 
     def format_error(self, line_num, col, msg, raw):
         parts = []

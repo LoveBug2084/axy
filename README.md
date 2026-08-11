@@ -17,10 +17,11 @@ The name comes from the 6502 registers A, X and Y.
   stderr, keeping stdout a pure assembly stream).
 - `-v` (anywhere in the command line) prints the symbol report after compiling:
   the current file's own variables (with their addresses), constants, and
-  labels. Imported symbols are omitted. With no source file, `-v` lists the
-  entire `.axysymbols` table instead — variables, constants and labels, each
-  entry naming the file that declared it. Without it the compiler is silent on
-  success.
+  labels, grouped under a `file.axy:` heading; imported symbols are omitted.
+  With no source file, `-v` lists the entire `.axysymbols` table instead —
+  variables, constants and labels, grouped by the file that declared them (each
+  group under a `file.axy:` heading, sorted by name within each group). Without
+  it the compiler is silent on success.
 - `-init` (anywhere in the command line) removes the `.axysymbols` state file
   before compiling, so a build chain starts from a clean symbol table. Used
   alone (`axy -init`) it only clears the file and exits, printing nothing;
@@ -434,6 +435,15 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-11 — `-v` symbol report grouped by file
+
+- With no source file, `-v` now groups the `.axysymbols` listing by type, then
+  by the file that declared each symbol, then by name. Each file's entries sit
+  under a `file.axy:` heading instead of carrying a `file:` prefix, so
+  symbols from different files are no longer interleaved.
+- The report shown after compiling a file uses the same grouping: its own
+  symbols sit under a `file.axy:` heading and are sorted by name.
 
 ## 2026-08-11 — `-v` listing format; owner recompile fix
 

@@ -1,7 +1,7 @@
-Show the declaring file before the symbol in the -v table, and make recompiling stable by reusing imported variable addresses
+Group the `-v` symbol report by type, then file, then name
 
-With no source file, `axy -v` now lists each symbol as `filename: name` (e.g. `lib.axy: score = $70`) — the declaring file comes first, before the symbol — instead of appending it after.
+`axy -v` (with no source file) now lists the `.axysymbols` table grouped by type, then by the file that declared each symbol, then by name. Each file's entries sit under a `file.axy:` heading (e.g. `lib.axy:`) with the symbols indented beneath, instead of every line carrying a `file:` prefix — so symbols from different files are no longer interleaved.
 
-A variable already present in the imported `.axysymbols` table now keeps its recorded address instead of being allocated a fresh one. Only new variables are taken from the counter (and advance it), so recompiling a file no longer shifts or skips variable addresses and the state file stays stable.
+The report shown after compiling a file now uses the same styling: the file's own variables, constants and labels are grouped under a `file.axy:` heading and sorted by name.
 
 - README changelog updated.
