@@ -111,6 +111,10 @@ class AXYCompiler:
         origin = sym.get('origin')
         return f" ({origin})" if origin else ""
 
+    def _origin_prefix(self, sym):
+        origin = sym.get('origin')
+        return f"{origin}: " if origin else ""
+
     def load_symbols(self):
         # Import the symbol table left by a previous compile, and continue the
         # variable counter after the highest address it used.
@@ -207,11 +211,6 @@ class AXYCompiler:
             if name in ('a', 'x', 'y'):
                 self._error(line_num, cols[1], f"'{name}' is a reserved register")
                 return
-            if self.next_var is None:
-                self._error(line_num, 0, "No address set for variables - use 'axyvar <address>' or a .axysymbols file")
-                return
-            addr = self.next_var
-            self.next_var += 1
             existing = self.symbols.get(name)
             if existing is not None:
                 if not existing.get('imported'):
@@ -223,9 +222,13 @@ class AXYCompiler:
                 if existing['type'] != 'var':
                     self._error(line_num, cols[1], f"'{name}' already defined as a {existing['type']}{self._origin_suffix(existing)}")
                     return
-                if existing['addr'] != addr:
-                    self._error(line_num, cols[1], f"'{name}' already defined at &{existing['addr']:02X}{self._origin_suffix(existing)}")
+                addr = existing['addr']
+            else:
+                if self.next_var is None:
+                    self._error(line_num, 0, "No address set for variables - use 'axyvar <address>' or a .axysymbols file")
                     return
+                addr = self.next_var
+                self.next_var += 1
             self.symbols[name] = {'type': 'var', 'addr': addr, 'origin': self.source_file}
             return
 
@@ -767,27 +770,28 @@ class AXYCompiler:
     def report(self, stream=sys.stdout, include_imported=False):
         if include_imported:
             items = self.symbols
+            prefix = self._origin_prefix
         else:
             items = {name: sym for name, sym in self.symbols.items()
                      if not sym.get('imported')}
-        origin_suffix = self._origin_suffix if include_imported else (lambda sym: "")
+            prefix = (lambda sym: "")
 
         print(f"  Variables:", file=stream)
         for name, sym in items.items():
             if sym['type'] == 'var':
-                print(f"    {name} = ${sym['addr']:02X}{origin_suffix(sym)}", file=stream)
+                print(f"    {prefix(sym)}{name} = ${sym['addr']:02X}", file=stream)
         print(f"", file=stream)
 
         print(f"  Constants:", file=stream)
         for name, sym in items.items():
             if sym['type'] == 'const':
-                print(f"    {name} = {sym['lit']}{origin_suffix(sym)}", file=stream)
+                print(f"    {prefix(sym)}{name} = {sym['lit']}", file=stream)
         print(f"", file=stream)
 
         print(f"  Labels:", file=stream)
         for name, sym in items.items():
             if sym['type'] == 'label':
-                print(f"    {name}{origin_suffix(sym)}", file=stream)
+                print(f"    {prefix(sym)}{name}", file=stream)
 
     def format_error(self, line_num, col, msg, raw):
         parts = []

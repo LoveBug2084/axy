@@ -1,11 +1,7 @@
-Track symbol origin, restrict redeclaration to the declaring file, and list the symbol table
+Show the declaring file before the symbol in the -v table, and make recompiling stable by reusing imported variable addresses
 
-Each symbol in .axysymbols now records the source file that declared it, saved as a trailing comment (e.g. `var score = &70 ; lib.axy`). Duplicate-definition errors use it to report where the symbol was already defined: `'score' already defined at &70 (lib.axy)`.
+With no source file, `axy -v` now lists each symbol as `filename: name` (e.g. `lib.axy: score = $70`) — the declaring file comes first, before the symbol — instead of appending it after.
 
-Redeclaration is now owner-scoped: a symbol may only be redeclared by the file named as its origin. Recompiling the file that declared it stays harmless, but any other file redeclaring the name — even with an identical definition — reports an error naming the owner. Previously an identical redefinition from another file was accepted silently.
+A variable already present in the imported `.axysymbols` table now keeps its recorded address instead of being allocated a fresh one. Only new variables are taken from the counter (and advance it), so recompiling a file no longer shifts or skips variable addresses and the state file stays stable.
 
-New: `axy -v` with no source file now lists the entire `.axysymbols` table instead of printing usage — variables, constants and labels, each entry naming the file that declared it. `axy -init -v` (clears then shows the report) and compiling with `-v` (current file's own symbols only) are unchanged.
-
-- Same-file duplicate declarations still error as before (`var`, `name = value`, and labels).
-- Old-format .axysymbols files without origin comments still load; the owner check applies once the file has been recompiled.
-- README updated (.axysymbols section and changelog).
+- README changelog updated.

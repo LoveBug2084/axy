@@ -47,8 +47,10 @@ harmless, while any other file redeclaring the name reports an error, whether
 or not the definition matches. Each entry records the source file that
 declared it (e.g. `var score = &70 ; lib.axy`), and duplicate-definition
 errors report where the symbol was already defined:
-`'score' already defined at &70 (lib.axy)`. Variables declared without an
-`axyvar` continue after the highest address imported from `.axysymbols`.
+`'score' already defined (lib.axy)`. Variables declared without an
+`axyvar` continue after the highest address imported from `.axysymbols`; a
+variable already present in `.axysymbols` keeps its recorded address, so
+recompiling the file that owns it never shifts it.
 
 There is no default variable base: declaring a `var` when no base has been
 set — no `axyvar` in the source and no imported variables — reports an error.
@@ -430,6 +432,16 @@ count = 0
 ---
 
 # Change Log
+
+## 2026-08-11 — `-v` listing format; owner recompile fix
+
+- With no source file, `-v` now lists each symbol as `filename: name`
+  (e.g. `lib.axy: score = $70`) — the declaring file comes first, before the
+  symbol — instead of appending it after.
+- Fixed: recompiling the file that owns a variable no longer fails. A variable
+  already present in the imported `.axysymbols` table keeps its recorded
+  address — only new variables are allocated from the counter and advance it —
+  so the state file stays stable and no addresses are skipped.
 
 ## 2026-08-11 — `.axysymbols` state file
 
