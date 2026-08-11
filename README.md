@@ -134,7 +134,7 @@ symbol:
 org &2000
 org 1234
 org %1111000000000000
-org base                ; constant base = &1900
+org base
 ```
 
 If `<address>` names a constant, the constant is emitted as a symbol at its
@@ -164,7 +164,7 @@ resolved too):
 ```
 axyvar &70
 axyvar 1234
-axyvar base                ; const base = &40
+axyvar base                ; set to the address held in a constant
 ```
 
 `axyvar` generates no assembly of its own; it only controls the addresses the
@@ -395,8 +395,10 @@ Line 2: Only +=1 and -=1 supported
 ## Example
 
 ```
-var count
-const target = 5
+var count  ; address assigned from current axyvar
+           ; axyvar incremented for the next variable definition
+
+target = 5 ; constant value assigned to target
 
 count = 0
 .loop
@@ -411,22 +413,22 @@ count = 0
 
 ## Status
 
-| Feature              | Status      |
-| -------------------- | ----------- |
-| `var`                | implemented |
-| constants            | implemented |
-| assignment           | implemented |
-| `+= 1` / `-= 1`      | implemented |
-| labels (`.name`)     | implemented |
-| `jmp`                | implemented |
-| `jsr` / `rts`        | implemented |
-| `if ... endif`       | implemented |
-| `while ... endwhile` | implemented |
-| `repeat ... until`   | implemented |
-| `pha` / `pla`        | implemented |
-| `org` / `axyvar`     | implemented |
-| `asm` / `endasm`     | implemented |
-| comments             | implemented |
+| Feature                   | Status      |
+| ------------------------- | ----------- |
+| `var`                     | implemented |
+| constants                 | implemented |
+| assignment                | implemented |
+| `+= 1` / `-= 1`           | implemented |
+| labels (`.name`)          | implemented |
+| `jmp`                     | implemented |
+| `jsr` / `rts`             | implemented |
+| `if ... endif`            | implemented |
+| `while ... endwhile`      | implemented |
+| `repeat ... until`        | implemented |
+| `pha` / `pla`             | implemented |
+| `org` / `axyvar`          | implemented |
+| `asm` / `endasm`          | implemented |
+| comments                  | implemented |
 | `.axysymbols` symbol file | implemented |
 
 ---
