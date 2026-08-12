@@ -230,11 +230,47 @@ chosen matching the src type.
 ```
 name += 1
 name -= 1
+name += value
+name -= value
+name += var
+name -= var
+name += const
+name -= const
+a += 1
+a -= 1
+a += value
+a -= var
+x += 1
+y -= 1
+x += var
+y -= value
 ```
 
-Only `+= 1` and `-= 1` are supported. For `x`/`y` this compiles to
-`inx`/`dex`/`iny`/`dey`; for variables it compiles to `inc name`/`dec name`.
-`a` is not supported.
+Extended `+=`/`-=` operators (since 2026-08-12) support any numeric value,
+variables, and constants on the right-hand side. The following table shows
+the generated 6502 code:
+
+| Syntax | Generated 6502 | Notes |
+|--------|----------------|-------|
+| `name += 1` / `name -= 1` (variable) | `inc name` / `dec name` | Optimized path |
+| `name += 1` / `name -= 1` (`x`) | `inx` | via accumulator |
+| `name += 1` / `name -= 1` (`y`) | `iny` | via accumulator |
+| `name += value` / `name -= value` (number literal, variable) | `lda name / clc / adc #value / sta name` | `clc` always precedes `adc` |
+| `name += value` / `name -= value` (number literal, variable) | `lda name / sec / sbc #value / sta name` | `sec` always precedes `sbc` |
+| `name += var` / `name -= var` (variable) | `lda name / clc / adc var / sta name` | uses absolute addressing |
+| `name += const` / `name -= const` (constant) | `lda name / clc / adc #const / sta name` | constant chain resolves in BeebAsm |
+| `a += value` (register `a`) | `clc / adc #value` | carry must be managed |
+| `a -= var` (register `a`) | `sec / sbc var` | |
+| `x += var` (register `x`) | `txa / clc / adc var / tax` | via accumulator |
+| `y -= value` (register `y`) | `tya / sec / sbc #value / tay` | via accumulator |
+| `x += 1` | `inx` | optimized |
+| `y -= 1` | `dey` | optimized |
+
+- `clc` always precedes `adc`; `sec` always precedes `sbc`
+- Negative numbers not supported as a single token (use `var -= 5` not `var += -5`)
+- Carry flag must be managed by user in complex sequences
+- Optimization preserved: `+= 1`/`-= 1` on variables uses `inc`/`dec`, and on
+  `x`/`y` uses `inx`/`dex`/`iny`/`dey`
 
 ## Stack (`pha` / `pla`)
 
