@@ -644,3 +644,19 @@ count = 0
 - Output is written to the given file, or to stdout when none is given;
   writing over the input file is rejected.
 - The generated output header carries a timestamp.
+
+
+## 2026-08-12 — Extended `+=`/`-=` operators
+- `+=` and `-=` now support any numeric value (not just `1`), variables, and
+  constants on the right-hand side.
+- `name += value` / `name -= value` where value is a number literal generates:
+  `lda name / clc / adc #value / sta name` (for variables) or `clc / adc #value`
+  (for register `a`).
+- `name += var` / `name -= var` where value is a variable generates:
+  `lda name / clc / adc var / sta name` (or `sec / sbc var` for subtraction).
+- `name += const` / `name -= const` where value is a constant generates:
+  `lda name / clc / adc #const / sta name` (BeebAsm resolves chains).
+- `x`/`y` registers use `txa`/`tya` to transfer through accumulator.
+- Optimization preserved: `+= 1`/`-= 1` on variables uses `inc`/`dec`, and on
+  `x`/`y` uses `inx`/`dex`/`iny`/`dey`.
+- Always preceeds `adc` with `clc` and `sbc` with `sec`.

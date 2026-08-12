@@ -22,6 +22,8 @@
 	var score
 	var counter
 	var temp
+	var v1
+	var v2
 
 ; ============================================
 ; Constants
@@ -114,19 +116,19 @@
 .check_lives
 
 	if lives == lives_limit
-		score = 100
+	score = 100
 	endif
 
 	if lives != 5
-		score = 0
+	score = 0
 	endif
 
 	if a == space			; CMP #space
-		score = 1
+	score = 1
 	endif
 
 	if maximum == limit		; compare two constants !
-		score = 0
+	score = 0
 	endif
 
 ; ============================================
@@ -135,8 +137,8 @@
 
 	counter = 10
 	while counter != 0
-		score += 1
-		counter -= 1
+	score += 1
+	counter -= 1
 	endwhile
 
 ; ============================================
@@ -148,7 +150,7 @@
 .outer
 
 	if counter == 0
-		jmp done
+	jmp done
 	endif
 
 	temp = 3
@@ -156,7 +158,7 @@
 .inner
 
 	if temp == 0
-		jmp next
+	jmp next
 	endif
 
 	score += 1
@@ -205,13 +207,13 @@
 	counter = 3
 
 	repeat
-		counter -= 1
+	counter -= 1
 	until counter == 0
 
 	counter = 3
 
 	repeat
-		counter -= 1
+	counter -= 1
 	until counter != 2
 
 ; ============================================
@@ -220,4 +222,36 @@
 
 .done
 
-	a = 42	  ; Success marker
+	a = 42	  			; Success marker
+
+; ============================================
+; Test extended += / -=
+; ============================================
+
+					; Extended += with number literal
+	v1 += 5				; should generate: lda v1 / clc / adc #5 / sta v1
+
+					; Extended -= with variable
+	v1 -= v2			; should generate: lda v1 / sec / sbc v2 / sta v1
+
+					; Extended += with constant
+	v1 += C5			; should generate: lda v1 / clc / adc #C5 / sta v1
+
+					; Register a extended operations
+	a += 10				; should generate: clc / adc #10
+	a -= v1				; should generate: sec / sbc v1
+
+					; Register x extended operations (via accumulator)
+	x += v2				; should generate: txa / clc / adc v2 / tax
+	y -= 2				; should generate: tya / sec / sbc #2 / tay
+
+					; Optimization preserved: += 1 / -= 1 on variables
+	v1 += 1				; should generate: inc v1
+	v1 -= 1				; should generate: dec v1
+
+					; Optimization preserved: += 1 / -= 1 on x/y
+	x += 1				; should generate: inx
+	y -= 1				; should generate: dey
+
+					; Carry flag note: always clc/sec precedes adc/sbc
+					; Users must manage carry state in complex sequences

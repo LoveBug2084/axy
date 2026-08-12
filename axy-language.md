@@ -302,13 +302,31 @@ AXY has a deliberately small operator set:
 | Operator | Meaning                           | Used in                |
 | -------- | --------------------------------- | ---------------------- |
 | `=`      | assignment / constant declaration | assignments, constants |
-| `+= 1`   | increment by one                  | variables, `x`, `y`    |
-| `-= 1`   | decrement by one                  | variables, `x`, `y`    |
+| `+=`     | increment by one or more         | variables, `x`, `y`    |
+| `-=`     | decrement by one or more         | variables, `x`, `y`    |
 | `==`     | equal                             | `if`, `while`, `until` |
 | `!=`     | not equal                         | `if`, `while`, `until` |
 
 There are no arithmetic expressions — see
 [What AXY does not have](#what-axy-does-not-have).
+
+### Extended `+=`/`-=` operators (since 2026-08-12)
+
+`+=` and `-=` now support any numeric value, variables, and constants on the
+right-hand side:
+
+| Syntax | Generated 6502 | Notes |
+|--------|----------------|-------|
+| `name += 1` / `name -= 1` | `inc name` / `dec name` (variable)<br>`inx` / `dex` / `iny` / `dey` (x/y) | Optimized path - preserved from before |
+| `name += value` / `name -= value` (number literal) | `lda name / clc / adc #value / sta name` (variable)<br>`clc / adc #value` / `sec / sbc #value` (register `a`) | `clc` always precedes `adc`; `sec` always precedes `sbc` |
+| `name += var` / `name -= var` (variable) | `lda name / clc / adc var / sta name` (variable)<br>`lda name / sec / sbc var / sta name` (subtraction) | Uses absolute addressing for the RHS variable |
+| `name += const` / `name -= const` (constant) | `lda name / clc / adc #const / sta name` (variable)<br>`lda name / sec / sbc #const / sta name` (subtraction) | Constant chain resolves in BeebAsm (e.g. `maximum = limit`) |
+
+- `x`/`y` registers transfer through accumulator: `txa`/`tya` → math → `tax`/`tay`
+- Negative numbers not supported as a single token (use `var -= 5` not `var += -5`)
+- Carry flag must be managed by user in complex sequences
+
+---
 
 ---
 
@@ -484,21 +502,18 @@ program.axy: line 2: Only +=1 and -=1 supported
 
 ---
 
-## What AXY does not have
+## What AXY does not currently have
 
-AXY is intentionally minimal. There are no:
+AXY is intentionally minimal but its a bit too minimal at the moment but this will change. Currently there are no:
 
 - **Arithmetic expressions** — no `+`, `-`, `*`, `/` beyond the built-in
   `+= 1` / `-= 1`. Values are single names, numbers, or string constants.
 - **Arithmetic or math functions** — no `abs()`, `sin()`, random numbers,
-  etc. Write the assembly in an `asm` block instead.
+  etc. For now you will have to write the assembly in an `asm` block instead.
 - **Arrays or structs** — a `var` is a single byte at a fixed address.
-- **A `const` keyword** — constants are declared implicitly by
-  `name = value`.
 - **Expressions in conditions** — only `reg/var op value` with `==` / `!=`.
 - **Loops with conditions other than `==` / `!=`** — no `<`, `>`, etc.
-- **`goto`** — use labels with `jmp`, or structure the code with
-  `if`/`while`/`repeat`.
+- 
 - **String or data directives** — write them in an `asm` block.
 
 ---
