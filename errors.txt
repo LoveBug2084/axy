@@ -1,0 +1,34 @@
+Circular include of '{source}'
+Include depth exceeded (50) at '{source}'
+File not found: '{filename}'
+Included file not found: '{filename}'
+Expected 'include <file>'
+Var needs exactly one name: {name}
+{name} is a reserved register
+{name} is a reserved register
+{name} already defined{self._origin_suffix(existing)}
+{name} already defined as a {existing['type']}{self._origin_suffix(existing)}
+{name} already defined as '{existing['lit']}'{self._origin_suffix(existing)}
+{name} is a constant and cannot be changed
+{name} is a reserved register
+No address set for variables - use 'axyvar <address>' or a .axysymbols file
+'pha' takes no arguments
+'pla' takes no arguments
+'repeat' takes no arguments
+'rts' takes no arguments
+{tokens[0]} already defined as a {existing['type']}{self._origin_suffix(existing)}
+Undefined symbol '{dest}'
+Undefined symbol '{name}'
+Unrecognized statement
+Unsupported operator '{op}'
+{until} without matching 'repeat'
+'var' needs exactly one name
+"Expected 'org <address>'"
+"Expected 'axyvar <address>'"
+Invalid address '{tokens[1]}'
+'asm' takes no arguments
+'endasm' without matching 'asm'
+Missing 'endasm'
+Missing 'endif'
+Missing 'endwhile'
+Missing 'until'

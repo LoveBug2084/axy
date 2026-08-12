@@ -100,9 +100,6 @@ class AXYCompiler:
         if seen is None:
             seen = set()
         source = os.path.basename(filename)
-        if source in stack:
-            self._error(None, 0, f"Circular include of '{source}'")
-            return
         if source in seen:
             return
         seen.add(source)
@@ -136,6 +133,15 @@ class AXYCompiler:
                     self.current_raw = stripped
                     if len(tokens) != 2:
                         self._error(line_num, 0, "Expected 'include <file>'")
+                        continue
+                    # Check for self-include (same file)
+                    included_file = tokens[1]
+                    inc_filename = os.path.basename(included_file)
+                    if inc_filename == source:
+                        self._error(line_num, 0, f"Circular include of '{inc_filename}'")
+                        continue
+                    if depth >= 50:
+                        self._error(line_num, 0, f"Include depth exceeded (50) at '{inc_filename}'")
                         continue
                     yield from self._iter_lines(tokens[1], depth + 1,
                                                 stack + [source], seen)
@@ -942,6 +948,8 @@ def main():
             verbose = True
         elif arg == '-init':
             init = True
+        elif arg == '-clean':
+            init = True
         else:
             args.append(arg)
 
@@ -963,13 +971,13 @@ def main():
         if init:
             return
         print("axy compiler")
-        print("usage: axy [-v] [-init] input.axy [output.asm]")
+        print("usage: axy [-v] [-clean] input.axy [output.asm]")
         print("if no output file is given, the generated assembly is written to stdout.")
         print()
-        print("  -init               - remove the .axysymbols state file")
+        print("  -clean              - remove the .axysymbols state file")
         print("  -v                  - print the symbol report after compiling")
         print()
-        print("  see README.md and axy-language.md for full details")
+        print("  see README.md, language.md (full reference), and cheatsheet.md (quick reference) for full details")
         sys.exit(1)
     
     infile = args[0]
